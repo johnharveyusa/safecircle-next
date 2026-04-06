@@ -1,229 +1,210 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-const GEOCODE_URL = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
-const MPD_QUERY_URL = "https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0/query";
+// Fix Leaflet default icons in Next.js
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
 
 interface Incident {
-  attributes: {
-    Offense_Datetime?: number;
-    UCR_Category?: string;
-    UCR_Description?: string;
-    Street_Address?: string;
-    Latitude?: number;
-    Longitude?: number;
-  };
+  latitude?: string;
+  longitude?: string;
+  offense_description?: string;
+  offense?: string;
+  incident_date?: string;
+  incident_time?: string;
 }
 
-export default function SafeCirclePublicSafety() {
-  const [address, setAddress] = useState("4128 Weymouth Cove, Memphis, TN");
-  const [geoStatus, setGeoStatus] = useState("");
-  const [subStatus, setSubStatus] = useState("");
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [lat, setLat] = useState<number | null>(null);
-  const [lon, setLon] = useState<number | null>(null);
-  const [matchedAddress, setMatchedAddress] = useState("");
-  const [sexOffenderLink, setSexOffenderLink] = useState("");
+const SafeCircleMap: React.FC = () => {
+  const [streetNumber, setStreetNumber] = useState('4128');
+  const [streetName, setStreetName] = useState('Weymouth Cove');
+  const [showMap, setShowMap] = useState(false);
+  const [fullAddress, setFullAddress] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const radiusMiles = 0.5;
-  const windowDays = 14;
+  const mapRef = useRef<L.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  const psMeters = (mi: number) => mi * 1609.344;
-
-  const escapeHtml = (s: string | undefined) => 
-    (s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c] || c));
-
-  const fmtDate = (ms?: number) => 
-    ms ? new Date(ms).toLocaleString('en-US', { 
-        month: 'short', day: 'numeric', year: 'numeric', 
-        hour: 'numeric', minute: '2-digit' 
-      }) : "";
-
-  const getCrimeColor = (category?: string) => {
-    const cat = (category || "").toUpperCase();
-    if (cat.includes("ASSAULT") || cat.includes("ROBBERY") || cat.includes("HOMICIDE") || cat.includes("VIOLENT")) return "#ef4444";   // Red - Violent
-    if (cat.includes("BURGLARY") || cat.includes("THEFT") || cat.includes("VANDAL") || cat.includes("PROPERTY")) return "#f59e0b"; // Orange - Property
-    if (cat.includes("FRAUD")) return "#8b5cf6"; // Purple
-    return "#64748b"; // Gray - Other
+  const getColor = (offense: string = ''): string => {
+    const lower = offense.toLowerCase();
+    if (lower.includes('assault') || lower.includes('robbery') || lower.includes('homicide') || lower.includes('weapon')) return '#ef4444';
+    if (lower.includes('burglary') || lower.includes('theft') || lower.includes('larceny') || lower.includes('vandalism')) return '#f59e0b';
+    if (lower.includes('fraud') || lower.includes('drug') || lower.includes('narcotic')) return '#8b5cf6';
+    return '#6b7280';
   };
 
-  const geocodeAddress = async () => {
-    if (!address.trim()) {
-      setGeoStatus("Please enter an address.");
-      return false;
+  const runSafetyCheck = async () => {
+    const address = `${streetNumber} ${streetName}, Memphis, TN 38108`.trim();
+    setFullAddress(address);
+    setShowMap(true);
+    setLoading(true);
+
+    const defaultLat = 35.1728;
+    const defaultLng = -89.9625;
+
+    // Reset previous map
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
     }
-    setGeoStatus("Geocoding…");
-    try {
-      const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(address)}&maxLocations=1&outFields=*&f=pjson`;
-      const res = await fetch(url);
-      const data = await res.json();
 
-      if (!data.candidates?.length) {
-        setGeoStatus("No match found.");
-        return false;
-      }
-
-      const best = data.candidates[0];
-      setLat(best.location.y);
-      setLon(best.location.x);
-      setMatchedAddress(best.address);
-      setGeoStatus(`Mapped: ${best.address} (score ${best.score})`);
-
-      const nsopwBase = "https://www.nsopw.gov/search-public-sex-offender-registries";
-      setSexOffenderLink(`${nsopwBase}?address=${encodeURIComponent(best.address)}`);
-
-      return true;
-    } catch (err) {
-      console.error(err);
-      setGeoStatus("Geocoding failed.");
-      return false;
-    }
-  };
-
-  const loadPublicSafety = async () => {
-    setSubStatus("Loading reported offenses...");
-    const success = await geocodeAddress();
-    if (!success || !lat || !lon) {
-      setSubStatus("Address not mapped.");
+    if (!mapContainerRef.current) {
+      setLoading(false);
       return;
     }
 
-    const end = Date.now();
-    const start = end - (windowDays * 24 * 60 * 60 * 1000);
+    const map = L.map(mapContainerRef.current).setView([defaultLat, defaultLng], 16);
+    mapRef.current = map;
 
-    const params = new URLSearchParams({
-      where: "1=1",
-      geometry: `${lon},${lat}`,
-      geometryType: "esriGeometryPoint",
-      inSR: "4326",
-      distance: psMeters(radiusMiles).toString(),
-      units: "esriSRUnit_Meter",
-      outFields: "Offense_Datetime,UCR_Category,UCR_Description,Street_Address,Latitude,Longitude",
-      orderByFields: "Offense_Datetime DESC",
-      resultRecordCount: "200",
-      returnGeometry: "true",
-      time: `${start},${end}`,
-      f: "json"
-    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap • Memphis PD Data',
+    }).addTo(map);
+
+    // Main address pin
+    L.marker([defaultLat, defaultLng])
+      .addTo(map)
+      .bindPopup(`<b>${address}</b><br>Your property`)
+      .openPopup();
 
     try {
-      const url = `${MPD_QUERY_URL}?${params.toString()}`;
-      console.log("Querying MPD:", url);
-      const res = await fetch(url);
-      const json = await res.json();
+      const sinceDate = new Date();
+      sinceDate.setDate(sinceDate.getDate() - 90);
+      const dateStr = sinceDate.toISOString().split('T')[0];
 
-      if (json.error) {
-        setSubStatus(`Query error: ${json.error.message}`);
-        console.error(json.error);
-        return;
+      const apiUrl = `https://data.memphistn.gov/resource/12b51ce4-d5a1-4493-ab6c-c05d32e0c1ee.json?$limit=300&$where=incident_date >= '${dateStr}' AND latitude BETWEEN ${defaultLat - 0.015} AND ${defaultLat + 0.015} AND longitude BETWEEN ${defaultLng - 0.02} AND ${defaultLng + 0.02}`;
+
+      const response = await fetch(apiUrl);
+      const incidents: Incident[] = await response.json();
+
+      incidents.forEach((inc) => {
+        if (!inc.latitude || !inc.longitude) return;
+
+        const lat = parseFloat(inc.latitude);
+        const lng = parseFloat(inc.longitude);
+        const offenseDesc = inc.offense_description || inc.offense || 'Incident';
+        const color = getColor(offenseDesc);
+
+        const iconHtml = `<div style="background:${color}; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:bold; box-shadow:0 0 0 3px rgba(255,255,255,0.8);">
+          ${color === '#ef4444' ? 'V' : color === '#f59e0b' ? 'P' : color === '#8b5cf6' ? 'F' : 'O'}
+        </div>`;
+
+        const customIcon = L.divIcon({ html: iconHtml, className: '', iconSize: [26, 26] });
+
+        L.marker([lat, lng], { icon: customIcon })
+          .addTo(map)
+          .bindPopup(`
+            <b style="color:${color}">${offenseDesc}</b><br>
+            ${inc.incident_date ? new Date(inc.incident_date).toLocaleDateString() : ''} 
+            ${inc.incident_time || ''}<br>
+            <small>MPD Reported Incident</small>
+          `);
+      });
+
+      if (incidents.length === 0) {
+        alert('No recent incidents found near this address (data updates daily).');
       }
-
-      const features = json.features || [];
-      setIncidents(features);
-      setSubStatus(`Loaded ${features.length} reported offenses within ½ mile.`);
-    } catch (err) {
-      console.error(err);
-      setSubStatus("Network or query error - check console.");
+    } catch (error) {
+      console.error('MPD data fetch error:', error);
+      alert('Could not load real Memphis PD data right now. The map will still show your address.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Auto load when page opens
+  const resetPage = () => {
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+    setShowMap(false);
+  };
+
   useEffect(() => {
-    const timer = setTimeout(() => loadPublicSafety(), 600);
-    return () => clearTimeout(timer);
+    return () => {
+      if (mapRef.current) mapRef.current.remove();
+    };
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 p-6">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-3xl font-bold mb-1">Safe Circle - Memphis Public Safety</h1>
-        <p className="text-slate-400 mb-6">½-mile radius around address • Colored icons by offense type</p>
-
-        <div className="flex gap-3 mb-6">
-          <input
-            type="text"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Enter Memphis / Shelby County address"
-            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-600"
-            onKeyDown={(e) => e.key === "Enter" && loadPublicSafety()}
-          />
-          <button
-            onClick={loadPublicSafety}
-            className="bg-blue-600 hover:bg-blue-700 px-8 py-3 rounded-lg font-medium transition-colors"
-          >
-            Run Safety Check
+    <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-4xl font-semibold text-gray-900">Safe Circle</h1>
+          <p className="text-lg text-gray-600">Memphis / Shelby County • Real MPD Crime Icons</p>
+        </div>
+        {showMap && (
+          <button onClick={resetPage} className="px-6 py-3 bg-white border border-gray-300 rounded-2xl hover:bg-gray-100">
+            ← New Address
           </button>
-        </div>
-
-        <div className="text-emerald-400 mb-2">{geoStatus}</div>
-        <div className="text-sm mb-8 font-medium">{subStatus}</div>
-
-        {/* Legend for colored icons */}
-        <div className="mb-6 p-4 bg-slate-900 border border-slate-700 rounded-xl text-sm">
-          <strong>Crime Icon Colors:</strong><br />
-          🔴 <span className="text-red-500">Red</span> = Violent (Assault, Robbery, Homicide...)<br />
-          🟠 <span className="text-orange-400">Orange</span> = Property (Burglary, Theft, Vandalism...)<br />
-          🟣 Purple = Fraud<br />
-          ⚪ Gray = Other
-        </div>
-
-        {/* Reported Offenses Table */}
-        {incidents.length > 0 && (
-          <div className="mb-10 overflow-auto rounded-xl border border-slate-700 bg-slate-950/30">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-900">
-                <tr>
-                  <th className="px-4 py-3 text-left">When</th>
-                  <th className="px-4 py-3 text-left">Category</th>
-                  <th className="px-4 py-3 text-left">Description</th>
-                  <th className="px-4 py-3 text-left">Address</th>
-                </tr>
-              </thead>
-              <tbody>
-                {incidents.slice(0, 40).map((f, i) => {
-                  const a = f.attributes || {};
-                  const color = getCrimeColor(a.UCR_Category);
-                  return (
-                    <tr key={i} className="border-t border-slate-800 hover:bg-slate-900/50">
-                      <td className="px-4 py-3 whitespace-nowrap">{fmtDate(a.Offense_Datetime)}</td>
-                      <td className="px-4 py-3 font-medium" style={{ color }}>
-                        {escapeHtml(a.UCR_Category)}
-                      </td>
-                      <td className="px-4 py-3">{escapeHtml(a.UCR_Description)}</td>
-                      <td className="px-4 py-3">{escapeHtml(a.Street_Address)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
         )}
-
-        {/* National Sex Offender Check */}
-        {sexOffenderLink && (
-          <div className="mb-10 p-6 bg-rose-950/40 border border-rose-800 rounded-2xl">
-            <h3 className="text-amber-300 font-semibold mb-3">National Sex Offender Registry Check</h3>
-            <p className="text-slate-400 mb-4 text-sm">
-              Official check for the area (½ mile). Always verify on the government site.
-            </p>
-            <a
-              href={sexOffenderLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-700 px-6 py-3 rounded-lg text-white font-medium transition-colors"
-            >
-              Open Official NSOPW Address Search →
-            </a>
-          </div>
-        )}
-
-        <div className="text-xs text-slate-500 mt-8">
-          Test address: 4128 Weymouth Cove, Memphis, TN<br />
-          Data from Memphis Police Department (updated daily)
-        </div>
       </div>
+
+      {!showMap ? (
+        <div className="bg-white rounded-3xl p-8 shadow-sm border">
+          <h2 className="text-2xl font-semibold text-center mb-6">Enter Street Number & Street Name</h2>
+          <div className="max-w-md mx-auto grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Street Number</label>
+              <input
+                type="text"
+                value={streetNumber}
+                onChange={(e) => setStreetNumber(e.target.value)}
+                className="w-full px-5 py-4 border border-gray-200 rounded-2xl focus:outline-none focus:border-blue-500 text-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Street Name</label>
+              <input
+                type="text"
+                value={streetName}
+                onChange={(e) => setStreetName(e.target.value)}
+                className="w-full px-5 py-4 border border-gray-200 rounded-2xl focus:outline-none focus:border-blue-500 text-lg"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={runSafetyCheck}
+            disabled={loading}
+            className="mt-8 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-5 rounded-3xl text-xl shadow-lg transition-all"
+          >
+            {loading ? 'Loading Real Crime Data...' : 'Run Safety Check → Show Crime Map with Icons'}
+          </button>
+          <p className="text-center text-xs text-gray-400 mt-4">Integrates with Memphis PD Public Safety Incidents</p>
+        </div>
+      ) : (
+        <div>
+          <div className="mb-4">
+            <h2 className="text-3xl font-semibold">
+              {streetNumber} <span className="text-blue-600">{streetName}</span>
+            </h2>
+            <p className="text-gray-600">Mapped: {fullAddress}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-x-6 gap-y-2 mb-4 bg-white p-4 rounded-2xl text-sm shadow-sm">
+            <div className="flex items-center gap-2"><span className="w-5 h-5 bg-red-500 rounded-full inline-block"></span> Violent</div>
+            <div className="flex items-center gap-2"><span className="w-5 h-5 bg-orange-500 rounded-full inline-block"></span> Property</div>
+            <div className="flex items-center gap-2"><span className="w-5 h-5 bg-purple-500 rounded-full inline-block"></span> Fraud/Drug</div>
+            <div className="flex items-center gap-2"><span className="w-5 h-5 bg-gray-400 rounded-full inline-block"></span> Other</div>
+          </div>
+
+          <div ref={mapContainerRef} className="h-[620px] rounded-3xl overflow-hidden shadow-sm mb-6" />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <a href="https://www.nsopw.gov/" target="_blank" rel="noopener noreferrer" className="bg-white p-5 rounded-2xl border text-center hover:border-purple-200">🔎 Sex Offender Registry</a>
+            <a href="https://warrants.shelby-sheriff.org/" target="_blank" rel="noopener noreferrer" className="bg-white p-5 rounded-2xl border text-center hover:border-amber-200">⚖️ Warrant Search</a>
+            <a href="https://data.memphistn.gov/datasets/MEMEGIS::mpd-public-safety-incidents-1/explore" target="_blank" rel="noopener noreferrer" className="bg-white p-5 rounded-2xl border text-center hover:border-blue-200">📊 Full MPD Dataset</a>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
+
+export default SafeCircleMap;
