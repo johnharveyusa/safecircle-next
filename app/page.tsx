@@ -1,16 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
-// Fix Leaflet default icons
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+import React, { useState, useEffect } from 'react';
 
 const GEOCODE_URL = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
 const MPD_QUERY_URL = "https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0/query";
@@ -36,11 +26,6 @@ export default function SafeCirclePublicSafety() {
   const [matchedAddress, setMatchedAddress] = useState("");
   const [sexOffenderLink, setSexOffenderLink] = useState("");
 
-  const mapRef = useRef<L.Map | null>(null);
-  const layerGroupRef = useRef<L.LayerGroup | null>(null);
-  const circleRef = useRef<L.Circle | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-
   const radiusMiles = 0.5;
   const windowDays = 14;
 
@@ -57,10 +42,10 @@ export default function SafeCirclePublicSafety() {
 
   const getCrimeColor = (category?: string) => {
     const cat = (category || "").toUpperCase();
-    if (cat.includes("ASSAULT") || cat.includes("ROBBERY") || cat.includes("HOMICIDE") || cat.includes("VIOLENT")) return "#ef4444";
-    if (cat.includes("BURGLARY") || cat.includes("THEFT") || cat.includes("VANDAL") || cat.includes("PROPERTY")) return "#f59e0b";
-    if (cat.includes("FRAUD")) return "#8b5cf6";
-    return "#64748b";
+    if (cat.includes("ASSAULT") || cat.includes("ROBBERY") || cat.includes("HOMICIDE") || cat.includes("VIOLENT")) return "#ef4444";   // Red - Violent
+    if (cat.includes("BURGLARY") || cat.includes("THEFT") || cat.includes("VANDAL") || cat.includes("PROPERTY")) return "#f59e0b"; // Orange - Property
+    if (cat.includes("FRAUD")) return "#8b5cf6"; // Purple
+    return "#64748b"; // Gray - Other
   };
 
   const geocodeAddress = async () => {
@@ -130,7 +115,7 @@ export default function SafeCirclePublicSafety() {
 
       if (json.error) {
         setSubStatus(`Query error: ${json.error.message}`);
-        console.error("MPD Error:", json.error);
+        console.error(json.error);
         return;
       }
 
@@ -139,73 +124,11 @@ export default function SafeCirclePublicSafety() {
       setSubStatus(`Loaded ${features.length} reported offenses within ½ mile.`);
     } catch (err) {
       console.error(err);
-      setSubStatus("Network or query error - check console for details.");
+      setSubStatus("Network or query error - check console.");
     }
   };
 
-  // Map setup and updates
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-
-    if (!mapRef.current) {
-      mapRef.current = L.map(mapContainerRef.current).setView([35.1495, -90.0490], 14);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "© OpenStreetMap",
-      }).addTo(mapRef.current);
-      layerGroupRef.current = L.layerGroup().addTo(mapRef.current);
-    }
-
-    if (lat && lon && mapRef.current && layerGroupRef.current) {
-      layerGroupRef.current.clearLayers();
-      if (circleRef.current) circleRef.current.remove();
-
-      const center = L.latLng(lat, lon);
-      mapRef.current.setView(center, 15);
-
-      // Visit marker
-      L.circleMarker(center, { radius: 9, color: "#22c55e", fillOpacity: 0.9 })
-        .addTo(layerGroupRef.current)
-        .bindPopup(`<b>Visit Address</b><br>${escapeHtml(matchedAddress)}`);
-
-      // Radius circle
-      circleRef.current = L.circle(center, {
-        radius: psMeters(radiusMiles),
-        color: "#64748b",
-        weight: 2,
-        opacity: 0.6,
-        fillOpacity: 0.08,
-      }).addTo(layerGroupRef.current);
-
-      // Crime icons
-      incidents.forEach((f) => {
-        const a = f.attributes || {};
-        if (typeof a.Latitude !== "number" || typeof a.Longitude !== "number") return;
-
-        const point = L.latLng(a.Latitude, a.Longitude);
-        const color = getCrimeColor(a.UCR_Category);
-
-        const popupHTML = `
-          <div style="font-size:13px; line-height:1.4;">
-            <span style="display:inline-block;width:18px;height:18px;background:${color};border-radius:50%;border:2px solid white;"></span>
-            <b>${escapeHtml(a.UCR_Category)}</b><br>
-            ${escapeHtml(a.UCR_Description)}<br>
-            ${escapeHtml(a.Street_Address)}<br>
-            <span style="opacity:0.85">${fmtDate(a.Offense_Datetime)}</span>
-          </div>`;
-
-        L.circleMarker(point, {
-          radius: 8,
-          color: "#fff",
-          weight: 2,
-          fillColor: color,
-          fillOpacity: 0.95,
-        }).addTo(layerGroupRef.current!).bindPopup(popupHTML);
-      });
-    }
-  }, [lat, lon, incidents, matchedAddress]);
-
-  // Auto load on page open
+  // Auto load when page opens
   useEffect(() => {
     const timer = setTimeout(() => loadPublicSafety(), 600);
     return () => clearTimeout(timer);
@@ -215,14 +138,14 @@ export default function SafeCirclePublicSafety() {
     <div className="min-h-screen bg-slate-950 text-slate-200 p-6">
       <div className="max-w-5xl mx-auto">
         <h1 className="text-3xl font-bold mb-1">Safe Circle - Memphis Public Safety</h1>
-        <p className="text-slate-400 mb-6">½-mile radius reported offenses + National Sex Offender Registry check</p>
+        <p className="text-slate-400 mb-6">½-mile radius around address • Colored icons by offense type</p>
 
         <div className="flex gap-3 mb-6">
           <input
             type="text"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="Enter address in Memphis / Shelby County"
+            placeholder="Enter Memphis / Shelby County address"
             className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-600"
             onKeyDown={(e) => e.key === "Enter" && loadPublicSafety()}
           />
@@ -236,6 +159,15 @@ export default function SafeCirclePublicSafety() {
 
         <div className="text-emerald-400 mb-2">{geoStatus}</div>
         <div className="text-sm mb-8 font-medium">{subStatus}</div>
+
+        {/* Legend for colored icons */}
+        <div className="mb-6 p-4 bg-slate-900 border border-slate-700 rounded-xl text-sm">
+          <strong>Crime Icon Colors:</strong><br />
+          🔴 <span className="text-red-500">Red</span> = Violent (Assault, Robbery, Homicide...)<br />
+          🟠 <span className="text-orange-400">Orange</span> = Property (Burglary, Theft, Vandalism...)<br />
+          🟣 Purple = Fraud<br />
+          ⚪ Gray = Other
+        </div>
 
         {/* Reported Offenses Table */}
         {incidents.length > 0 && (
@@ -252,10 +184,13 @@ export default function SafeCirclePublicSafety() {
               <tbody>
                 {incidents.slice(0, 40).map((f, i) => {
                   const a = f.attributes || {};
+                  const color = getCrimeColor(a.UCR_Category);
                   return (
                     <tr key={i} className="border-t border-slate-800 hover:bg-slate-900/50">
                       <td className="px-4 py-3 whitespace-nowrap">{fmtDate(a.Offense_Datetime)}</td>
-                      <td className="px-4 py-3 font-medium">{escapeHtml(a.UCR_Category)}</td>
+                      <td className="px-4 py-3 font-medium" style={{ color }}>
+                        {escapeHtml(a.UCR_Category)}
+                      </td>
                       <td className="px-4 py-3">{escapeHtml(a.UCR_Description)}</td>
                       <td className="px-4 py-3">{escapeHtml(a.Street_Address)}</td>
                     </tr>
@@ -266,12 +201,12 @@ export default function SafeCirclePublicSafety() {
           </div>
         )}
 
-        {/* Sex Offender Check */}
+        {/* National Sex Offender Check */}
         {sexOffenderLink && (
           <div className="mb-10 p-6 bg-rose-950/40 border border-rose-800 rounded-2xl">
             <h3 className="text-amber-300 font-semibold mb-3">National Sex Offender Registry Check</h3>
             <p className="text-slate-400 mb-4 text-sm">
-              Official government check for the ½-mile area. Always verify on the source site.
+              Official check for the area (½ mile). Always verify on the government site.
             </p>
             <a
               href={sexOffenderLink}
@@ -284,11 +219,10 @@ export default function SafeCirclePublicSafety() {
           </div>
         )}
 
-        {/* Map */}
-        <div
-          ref={mapContainerRef}
-          className="w-full h-[520px] rounded-2xl border border-slate-700 overflow-hidden bg-slate-900"
-        />
+        <div className="text-xs text-slate-500 mt-8">
+          Test address: 4128 Weymouth Cove, Memphis, TN<br />
+          Data from Memphis Police Department (updated daily)
+        </div>
       </div>
     </div>
   );
