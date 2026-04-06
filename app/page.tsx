@@ -1,172 +1,295 @@
-// src/Page.tsx
-import React, { useState } from 'react';
-import Papa from 'papaparse';
+'use client';
 
-interface Contact {
-  name: string;
-  email: string;
-  phone: string;
+import React, { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix Leaflet default icons
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+const GEOCODE_URL = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
+const MPD_QUERY_URL = "https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0/query";
+
+interface Incident {
+  attributes: {
+    Offense_Datetime?: number;
+    UCR_Category?: string;
+    UCR_Description?: string;
+    Street_Address?: string;
+    Latitude?: number;
+    Longitude?: number;
+  };
 }
 
-const SafetyCirclePage: React.FC = () => {
-  const [circles, setCircles] = useState<Contact[]>([]);
-  const [address, setAddress] = useState({
-    streetNum: '',
-    streetName: '',
-    city: 'Memphis',
-    state: 'TN',
-  });
+export default function SafeCirclePublicSafety() {
+  const [address, setAddress] = useState("4128 Weymouth Cove, Memphis, TN");
+  const [geoStatus, setGeoStatus] = useState("");
+  const [subStatus, setSubStatus] = useState("");
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [lat, setLat] = useState<number | null>(null);
+  const [lon, setLon] = useState<number | null>(null);
+  const [matchedAddress, setMatchedAddress] = useState("");
+  const [sexOffenderLink, setSexOffenderLink] = useState("");
 
-  // CSV Upload Handler (multiple files OK)
-  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
+  const mapRef = useRef<L.Map | null>(null);
+  const layerGroupRef = useRef<L.LayerGroup | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
 
-    Array.from(files).forEach((file) => {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (result: any) => {
-          const newContacts: Contact[] = result.data
-            .map((row: any) => ({
-              name: (row.Name || `${row['First Name'] || ''} ${row['Last Name'] || ''}`.trim()) || 'Unknown',
-              email: row.Email || row.email || '',
-              phone: row.Phone || row.phone || '',
-            }))
-            .filter((c: Contact) => c.name && (c.email || c.phone));
+  const radiusMiles = 0.5;
+  const windowDays = 14;
 
-          setCircles((prev) => [...prev, ...newContacts]);
-        },
-      });
-    });
+  const psMeters = (mi: number) => mi * 1609.344;
+
+  const escapeHtml = (s: string | undefined) => 
+    (s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c] || c));
+
+  const fmtDate = (ms?: number) => 
+    ms ? new Date(ms).toLocaleString('en-US', { 
+        month: 'short', day: 'numeric', year: 'numeric', 
+        hour: 'numeric', minute: '2-digit' 
+      }) : "";
+
+  const getCrimeColor = (category?: string) => {
+    const cat = (category || "").toUpperCase();
+    if (cat.includes("ASSAULT") || cat.includes("ROBBERY") || cat.includes("HOMICIDE") || cat.includes("VIOLENT")) return "#ef4444";
+    if (cat.includes("BURGLARY") || cat.includes("THEFT") || cat.includes("VANDAL") || cat.includes("PROPERTY")) return "#f59e0b";
+    if (cat.includes("FRAUD")) return "#8b5cf6";
+    return "#64748b";
   };
 
-  // Shelby County Warrant Search (pre-filled)
-  const checkWarrants = () => {
-    if (!address.streetNum || !address.streetName) {
-      alert('Please enter both Street Number and Street Name.');
+  const geocodeAddress = async () => {
+    if (!address.trim()) {
+      setGeoStatus("Please enter an address.");
+      return false;
+    }
+    setGeoStatus("Geocoding…");
+    try {
+      const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(address)}&maxLocations=1&outFields=*&f=pjson`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!data.candidates?.length) {
+        setGeoStatus("No match found.");
+        return false;
+      }
+
+      const best = data.candidates[0];
+      setLat(best.location.y);
+      setLon(best.location.x);
+      setMatchedAddress(best.address);
+      setGeoStatus(`Mapped: ${best.address} (score ${best.score})`);
+
+      const nsopwBase = "https://www.nsopw.gov/search-public-sex-offender-registries";
+      setSexOffenderLink(`${nsopwBase}?address=${encodeURIComponent(best.address)}`);
+
+      return true;
+    } catch (err) {
+      console.error(err);
+      setGeoStatus("Geocoding failed.");
+      return false;
+    }
+  };
+
+  const loadPublicSafety = async () => {
+    setSubStatus("Loading reported offenses...");
+    const success = await geocodeAddress();
+    if (!success || !lat || !lon) {
+      setSubStatus("Address not mapped.");
       return;
     }
-    const baseUrl = 'https://warrants.shelby-sheriff.org/w_warrant_result.php';
+
+    const end = Date.now();
+    const start = end - (windowDays * 24 * 60 * 60 * 1000);
+
     const params = new URLSearchParams({
-      w: '',
-      l: '',
-      f: '',
-      s: address.streetNum,
-      st: address.streetName.toLowerCase(),
+      where: "1=1",
+      geometry: `${lon},${lat}`,
+      geometryType: "esriGeometryPoint",
+      inSR: "4326",
+      distance: psMeters(radiusMiles).toString(),
+      units: "esriSRUnit_Meter",
+      outFields: "Offense_Datetime,UCR_Category,UCR_Description,Street_Address,Latitude,Longitude",
+      orderByFields: "Offense_Datetime DESC",
+      resultRecordCount: "200",
+      returnGeometry: "true",
+      time: `${start},${end}`,
+      f: "json"
     });
-    window.open(`${baseUrl}?${params.toString()}`, '_blank');
-  };
 
-  // Sex Offender Checks
-  const checkSexOffenders = () => {
-    window.open('https://www.nsopw.gov/', '_blank');
-    window.open('https://sor.tbi.tn.gov/search', '_blank');
-    alert('Opened National Sex Offender Registry + Tennessee SOR.\nSearch the entered address to check for registered offenders nearby.');
-  };
+    try {
+      const url = `${MPD_QUERY_URL}?${params.toString()}`;
+      console.log("Querying MPD:", url);
+      const res = await fetch(url);
+      const json = await res.json();
 
-  // NEW: ESRI Memphis Safer Communities Dashboard (0.5 mile radius offenses)
-  const checkPublicSafetyESRI = () => {
-    if (!address.streetNum || !address.streetName) {
-      alert('Please enter Street Number and Street Name first.');
-      return;
+      if (json.error) {
+        setSubStatus(`Query error: ${json.error.message}`);
+        console.error("MPD Error:", json.error);
+        return;
+      }
+
+      const features = json.features || [];
+      setIncidents(features);
+      setSubStatus(`Loaded ${features.length} reported offenses within ½ mile.`);
+    } catch (err) {
+      console.error(err);
+      setSubStatus("Network or query error - check console for details.");
     }
-    const fullAddress = `${address.streetNum} ${address.streetName}, ${address.city}, ${address.state}`;
-    const esriUrl = 'https://experience.arcgis.com/experience/7fe3d1d471984096ad287080e3cd5e60';
-    window.open(esriUrl, '_blank');
-    alert(`✅ Memphis Safer Communities Dashboard opened (built with ESRI).\n\nSearch for "${fullAddress}" on the map to see reported offenses, crimes, and incidents within approximately 0.5 mile radius.`);
   };
 
-  // Geofencing Demo
-  const startGeofencing = () => {
-    if (!navigator.geolocation) {
-      alert('Geolocation not supported in this browser.');
-      return;
+  // Map setup and updates
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    if (!mapRef.current) {
+      mapRef.current = L.map(mapContainerRef.current).setView([35.1495, -90.0490], 14);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "© OpenStreetMap",
+      }).addTo(mapRef.current);
+      layerGroupRef.current = L.layerGroup().addTo(mapRef.current);
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        alert(`📍 Current location acquired!\nLat: ${pos.coords.latitude.toFixed(6)}\nLon: ${pos.coords.longitude.toFixed(6)}\n\nWe can build real 0.5-mile safe-zone geofencing in the next phase.`);
-      },
-      (err) => alert('Location error: ' + err.message)
-    );
-  };
+
+    if (lat && lon && mapRef.current && layerGroupRef.current) {
+      layerGroupRef.current.clearLayers();
+      if (circleRef.current) circleRef.current.remove();
+
+      const center = L.latLng(lat, lon);
+      mapRef.current.setView(center, 15);
+
+      // Visit marker
+      L.circleMarker(center, { radius: 9, color: "#22c55e", fillOpacity: 0.9 })
+        .addTo(layerGroupRef.current)
+        .bindPopup(`<b>Visit Address</b><br>${escapeHtml(matchedAddress)}`);
+
+      // Radius circle
+      circleRef.current = L.circle(center, {
+        radius: psMeters(radiusMiles),
+        color: "#64748b",
+        weight: 2,
+        opacity: 0.6,
+        fillOpacity: 0.08,
+      }).addTo(layerGroupRef.current);
+
+      // Crime icons
+      incidents.forEach((f) => {
+        const a = f.attributes || {};
+        if (typeof a.Latitude !== "number" || typeof a.Longitude !== "number") return;
+
+        const point = L.latLng(a.Latitude, a.Longitude);
+        const color = getCrimeColor(a.UCR_Category);
+
+        const popupHTML = `
+          <div style="font-size:13px; line-height:1.4;">
+            <span style="display:inline-block;width:18px;height:18px;background:${color};border-radius:50%;border:2px solid white;"></span>
+            <b>${escapeHtml(a.UCR_Category)}</b><br>
+            ${escapeHtml(a.UCR_Description)}<br>
+            ${escapeHtml(a.Street_Address)}<br>
+            <span style="opacity:0.85">${fmtDate(a.Offense_Datetime)}</span>
+          </div>`;
+
+        L.circleMarker(point, {
+          radius: 8,
+          color: "#fff",
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.95,
+        }).addTo(layerGroupRef.current!).bindPopup(popupHTML);
+      });
+    }
+  }, [lat, lon, incidents, matchedAddress]);
+
+  // Auto load on page open
+  useEffect(() => {
+    const timer = setTimeout(() => loadPublicSafety(), 600);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-      <header style={{ textAlign: 'center', marginBottom: '30px', color: '#1e40af' }}>
-        <h1>🛡️ Safety Circle</h1>
-        <p>For teens in Memphis • Build your circle • Check every address</p>
-      </header>
+    <div className="min-h-screen bg-slate-950 text-slate-200 p-6">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-3xl font-bold mb-1">Safe Circle - Memphis Public Safety</h1>
+        <p className="text-slate-400 mb-6">½-mile radius reported offenses + National Sex Offender Registry check</p>
 
-      {/* 1. Friend Circles */}
-      <section style={{ background: '#f0f9ff', padding: '25px', borderRadius: '16px', marginBottom: '25px' }}>
-        <h2>1. Build Your Friend Circles</h2>
-        <p>Upload one or more CSV files (columns: Name, Email, Phone)</p>
-        <input type="file" accept=".csv" multiple onChange={handleCSVUpload} style={{ marginBottom: '15px' }} />
-        <p><strong>Total contacts in circles: {circles.length}</strong></p>
-        <ul style={{ maxHeight: '180px', overflowY: 'auto' }}>
-          {circles.slice(0, 12).map((c, i) => (
-            <li key={i}>{c.name} — {c.email || c.phone}</li>
-          ))}
-          {circles.length > 12 && <li>... and {circles.length - 12} more</li>}
-        </ul>
-      </section>
-
-      {/* 2. Address Safety Checks (including new ESRI) */}
-      <section style={{ background: '#fefce8', padding: '25px', borderRadius: '16px', marginBottom: '25px' }}>
-        <h2>2. Check Any Address Safety</h2>
-        <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'end', marginBottom: '20px' }}>
-          <div>
-            <label>Street Number:</label><br />
-            <input
-              type="text"
-              value={address.streetNum}
-              onChange={(e) => setAddress({ ...address, streetNum: e.target.value })}
-              placeholder="4128"
-              style={{ width: '130px', padding: '10px', fontSize: '1rem' }}
-            />
-          </div>
-          <div>
-            <label>Street Name:</label><br />
-            <input
-              type="text"
-              value={address.streetName}
-              onChange={(e) => setAddress({ ...address, streetName: e.target.value })}
-              placeholder="Weymouth Cove"
-              style={{ width: '280px', padding: '10px', fontSize: '1rem' }}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-          <button onClick={checkWarrants} style={{ background: '#dc2626', color: 'white', padding: '14px 24px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1.05rem' }}>
-            🔍 Warrants (Shelby Sheriff)
-          </button>
-          <button onClick={checkSexOffenders} style={{ background: '#ea580c', color: 'white', padding: '14px 24px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1.05rem' }}>
-            🔍 Sex Offenders (National + TN)
-          </button>
-          <button onClick={checkPublicSafetyESRI} style={{ background: '#10b981', color: 'white', padding: '14px 24px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1.05rem' }}>
-            📍 Reported Offenses (ESRI 0.5 mi Dashboard)
+        <div className="flex gap-3 mb-6">
+          <input
+            type="text"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Enter address in Memphis / Shelby County"
+            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-600"
+            onKeyDown={(e) => e.key === "Enter" && loadPublicSafety()}
+          />
+          <button
+            onClick={loadPublicSafety}
+            className="bg-blue-600 hover:bg-blue-700 px-8 py-3 rounded-lg font-medium transition-colors"
+          >
+            Run Safety Check
           </button>
         </div>
-      </section>
 
-      {/* 3. Extra Tools */}
-      <section style={{ background: '#ecfdf5', padding: '25px', borderRadius: '16px' }}>
-        <h2>3. More Safety Tools</h2>
-        <button onClick={startGeofencing} style={{ background: '#10b981', color: 'white', padding: '14px 28px', border: 'none', borderRadius: '8px', margin: '8px 8px 8px 0', cursor: 'pointer', fontSize: '1.05rem' }}>
-          📍 Test Geofencing (Get My Location)
-        </button>
-        <button style={{ background: '#3b82f6', color: 'white', padding: '14px 28px', border: 'none', borderRadius: '8px', margin: '8px', cursor: 'pointer', fontSize: '1.05rem' }}>
-          🚨 Emergency Alert My Circle (coming next phase)
-        </button>
-      </section>
+        <div className="text-emerald-400 mb-2">{geoStatus}</div>
+        <div className="text-sm mb-8 font-medium">{subStatus}</div>
 
-      <footer style={{ textAlign: 'center', marginTop: '40px', fontSize: '0.9rem', color: '#555' }}>
-        <p>🛡️ Safety Circle links only to official public sources (Shelby Sheriff, NSOPW, Memphis ESRI Dashboard). Always verify with authorities. Do not attempt arrests.</p>
-      </footer>
+        {/* Reported Offenses Table */}
+        {incidents.length > 0 && (
+          <div className="mb-10 overflow-auto rounded-xl border border-slate-700 bg-slate-950/30">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-900">
+                <tr>
+                  <th className="px-4 py-3 text-left">When</th>
+                  <th className="px-4 py-3 text-left">Category</th>
+                  <th className="px-4 py-3 text-left">Description</th>
+                  <th className="px-4 py-3 text-left">Address</th>
+                </tr>
+              </thead>
+              <tbody>
+                {incidents.slice(0, 40).map((f, i) => {
+                  const a = f.attributes || {};
+                  return (
+                    <tr key={i} className="border-t border-slate-800 hover:bg-slate-900/50">
+                      <td className="px-4 py-3 whitespace-nowrap">{fmtDate(a.Offense_Datetime)}</td>
+                      <td className="px-4 py-3 font-medium">{escapeHtml(a.UCR_Category)}</td>
+                      <td className="px-4 py-3">{escapeHtml(a.UCR_Description)}</td>
+                      <td className="px-4 py-3">{escapeHtml(a.Street_Address)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Sex Offender Check */}
+        {sexOffenderLink && (
+          <div className="mb-10 p-6 bg-rose-950/40 border border-rose-800 rounded-2xl">
+            <h3 className="text-amber-300 font-semibold mb-3">National Sex Offender Registry Check</h3>
+            <p className="text-slate-400 mb-4 text-sm">
+              Official government check for the ½-mile area. Always verify on the source site.
+            </p>
+            <a
+              href={sexOffenderLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-700 px-6 py-3 rounded-lg text-white font-medium transition-colors"
+            >
+              Open Official NSOPW Address Search →
+            </a>
+          </div>
+        )}
+
+        {/* Map */}
+        <div
+          ref={mapContainerRef}
+          className="w-full h-[520px] rounded-2xl border border-slate-700 overflow-hidden bg-slate-900"
+        />
+      </div>
     </div>
   );
-};
-
-export default SafetyCirclePage;
+}
