@@ -73,7 +73,6 @@ export async function GET(req: NextRequest) {
       $limit: String(MAX_ROWS),
     });
 
-    // App token reduces throttling — optional but recommended
     const headers: Record<string, string> = {
       Accept: "application/json",
     };
@@ -95,7 +94,6 @@ export async function GET(req: NextRequest) {
     const raw: Record<string, string>[] = await res.json();
 
     const incidents: CrimeIncident[] = raw.map((r) => {
-      // Coordinates can live in a nested object or flat fields depending on dataset version
       const incLat =
         r.latitude != null
           ? parseFloat(r.latitude)

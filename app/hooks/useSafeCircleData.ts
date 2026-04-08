@@ -1,126 +1,49 @@
 /**
- * hooks/useSafeCircleData.ts
+ * lib/geocode.ts
  *
- * React hook that fans out to all four SafeCircle API routes in parallel
- * and provides unified loading / error state to the UI.
+ * Geocodes a free-text address to { lat, lng } using the free
+ * ArcGIS World Geocoding Service — no API key required.
  *
- * Usage:
- *   const { data, loading, errors, refresh } = useSafeCircleData(address);
+ * Same geocoder used by the MPD public safety HTML prototype.
  */
 
-"use client";
+const ARCGIS_GEOCODE_URL =
+  "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
 
-import { useState, useEffect, useCallback } from "react";
-import type { CrimeIncident } from "@/app/api/crimes/route";
-import type { SexOffender } from "@/app/api/offenders/route";
-import type { Warrant } from "@/app/api/warrants/route";
-import type { EmergencyContact } from "@/app/api/contacts/route";
-
-export interface SafeCircleData {
-  crimes: CrimeIncident[];
-  offenders: SexOffender[];
-  warrants: {
-    found: boolean;
-    count: number;
-    search_url: string;
-    warrants: Warrant[];
-  } | null;
-  contacts: EmergencyContact[];
-  center: { lat: number; lng: number } | null;
+export interface LatLng {
+  lat: number;
+  lng: number;
 }
 
-export interface SafeCircleErrors {
-  crimes?: string;
-  offenders?: string;
-  warrants?: string;
-  contacts?: string;
+export async function geocodeAddress(address: string): Promise<LatLng> {
+  const url = new URL(ARCGIS_GEOCODE_URL);
+  url.searchParams.set("SingleLine", address);
+  url.searchParams.set("maxLocations", "1");
+  url.searchParams.set("outFields", "*");
+  url.searchParams.set("f", "pjson");
+
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`ArcGIS geocoder HTTP error ${res.status}`);
+
+  const data = await res.json();
+  if (!data.candidates || !data.candidates.length) {
+    throw new Error(`Address not found: ${address}`);
+  }
+
+  const best = data.candidates[0];
+  return {
+    lat: best.location.y,
+    lng: best.location.x,
+  };
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
-  return json as T;
-}
-
-export function useSafeCircleData(address: string | null) {
-  const [data, setData] = useState<SafeCircleData>({
-    crimes: [],
-    offenders: [],
-    warrants: null,
-    contacts: [],
-    center: null,
-  });
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<SafeCircleErrors>({});
-
-  const fetch_all = useCallback(async (addr: string) => {
-    if (!addr.trim()) return;
-    setLoading(true);
-    setErrors({});
-
-    const q = encodeURIComponent(addr);
-
-    const [crimesResult, offendersResult, warrantsResult, contactsResult] =
-      await Promise.allSettled([
-        fetchJson<{ incidents: CrimeIncident[]; center: { lat: number; lng: number } }>(
-          `/api/crimes?address=${q}`
-        ),
-        fetchJson<{ offenders: SexOffender[] }>(`/api/offenders?address=${q}`),
-        fetchJson<{
-          found: boolean;
-          count: number;
-          search_url: string;
-          warrants: Warrant[];
-        }>(`/api/warrants?address=${q}`),
-        fetchJson<{ contacts: EmergencyContact[]; center: { lat: number; lng: number } }>(
-          `/api/contacts?address=${q}`
-        ),
-      ]);
-
-    const newErrors: SafeCircleErrors = {};
-    const newData: SafeCircleData = {
-      crimes: [],
-      offenders: [],
-      warrants: null,
-      contacts: [],
-      center: null,
-    };
-
-    if (crimesResult.status === "fulfilled") {
-      newData.crimes = crimesResult.value.incidents ?? [];
-      newData.center = crimesResult.value.center ?? null;
-    } else {
-      newErrors.crimes = crimesResult.reason?.message ?? "Could not load crime data";
-    }
-
-    if (offendersResult.status === "fulfilled") {
-      newData.offenders = offendersResult.value.offenders ?? [];
-    } else {
-      newErrors.offenders = offendersResult.reason?.message ?? "Could not load offender data";
-    }
-
-    if (warrantsResult.status === "fulfilled") {
-      newData.warrants = warrantsResult.value;
-    } else {
-      newErrors.warrants = warrantsResult.reason?.message ?? "Could not load warrant data";
-    }
-
-    if (contactsResult.status === "fulfilled") {
-      newData.contacts = contactsResult.value.contacts ?? [];
-      if (!newData.center) newData.center = contactsResult.value.center ?? null;
-    } else {
-      newErrors.contacts = contactsResult.reason?.message ?? "Could not load emergency contacts";
-    }
-
-    setData(newData);
-    setErrors(newErrors);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (address) fetch_all(address);
-  }, [address, fetch_all]);
-
-  return { data, loading, errors, refresh: () => address && fetch_all(address) };
+/**
+ * Parse a Shelby County address string into warrant search params.
+ * e.g. "4128 Weymouth Cove" -> { s: "4128", st: "weymouth" }
+ */
+export function parseWarrantParams(address: string): { s: string; st: string } {
+  const parts = address.trim().split(/\s+/);
+  const s = parts[0] ?? "";
+  const st = (parts[1] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  return { s, st };
 }

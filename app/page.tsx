@@ -1,32 +1,10 @@
-/**
- * app/page.tsx  (or app/dashboard/page.tsx)
- *
- * Main SafeCircle dashboard page.
- * Wires the useSafeCircleData hook to the UI, includes:
- *   - Address search I
- *   - Risk metrics
- *   - Crime list with category filter
- *   - Sex offender list
- *   - Warrant check result
- *   - Emergency contacts
- *   - Links to Shelby County Sheriff (warrants + jail roster)
- *   - Leaflet map (lazy-loaded)
- */
-
 "use client";
 
 import { useState, lazy, Suspense } from "react";
 import { useSafeCircleData } from "@/hooks/useSafeCircleData";
 import type { CrimeIncident } from "@/app/api/crimes/route";
 
-// Lazy-load the Leaflet map so it doesn't block SSR
 const SafeCircleMap = lazy(() => import("@/components/SafeCircleMap"));
-
-const TIER_COLOR: Record<string, string> = {
-  "3": "bg-red-100 text-red-800",
-  "2": "bg-amber-100 text-amber-800",
-  "1": "bg-gray-100 text-gray-600",
-};
 
 const CAT_COLORS: Record<string, string> = {
   violent: "text-red-700",
@@ -43,11 +21,31 @@ function categorizeCrime(c: CrimeIncident): string {
   return "other";
 }
 
-const WARRANT_BASE =
-  "https://warrants.shelby-sheriff.org/w_warrant_result.php";
+const WARRANT_BASE = "https://warrants.shelby-sheriff.org/w_warrant_result.php";
 const JAIL_URL = "https://www.shelby-sheriff.org/";
 const NSOPW_URL = "https://www.nsopw.gov/";
 const TN_SOR_URL = "https://sor.tbi.tn.gov/";
+
+function buildWarrantUrl(address: string): string {
+  const match = address.match(/^(\d+)\s+([a-zA-Z]+)/);
+  if (!match) return `${WARRANT_BASE}?w=&l=&f=&s=&st=`;
+  return `${WARRANT_BASE}?w=&l=&f=&s=${match[1]}&st=${match[2].toLowerCase()}`;
+}
+
+function buildNSOPWUrl(address: string): string {
+  const parts = address.split(",");
+  const street = parts[0]?.trim() ?? "";
+  const cityState = parts[1]?.trim() ?? "";
+  const cityParts = cityState.split(" ");
+  const state = cityParts.pop() ?? "TN";
+  const city = cityParts.join(" ").trim() || "Memphis";
+  const url = new URL("https://www.nsopw.gov/Search/Results");
+  url.searchParams.set("byAddressStreet", street);
+  url.searchParams.set("byAddressCity", city);
+  url.searchParams.set("byAddressState", state);
+  url.searchParams.set("radius", "0.5");
+  return url.toString();
+}
 
 export default function SafeCirclePage() {
   const [inputAddr, setInputAddr] = useState("4128 Weymouth Cove, Memphis TN");
@@ -67,12 +65,11 @@ export default function SafeCirclePage() {
       : data.crimes.filter((c) => categorizeCrime(c) === crimeFilter);
 
   const violentCount = data.crimes.filter((c) => categorizeCrime(c) === "violent").length;
-  const tier3Count = data.offenders.filter((o) => o.tier === "3" || o.tier === "Tier 3").length;
 
   const riskLevel =
-    violentCount >= 5 || tier3Count >= 3
+    violentCount >= 5
       ? "HIGH"
-      : violentCount >= 2 || tier3Count >= 1
+      : violentCount >= 2
       ? "MODERATE"
       : "LOW";
 
@@ -85,6 +82,7 @@ export default function SafeCirclePage() {
 
   return (
     <main className="max-w-3xl mx-auto px-4 pb-16">
+
       {/* Header */}
       <div className="flex items-center gap-3 py-5 border-b border-gray-100 mb-5">
         <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center">
@@ -116,14 +114,16 @@ export default function SafeCirclePage() {
         </button>
       </div>
 
-      {/* Errors */}
-      {Object.entries(errors).map(([key, msg]) => (
-        <div key={key} className="mb-3 px-4 py-2 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">
-          {key}: {msg}
-        </div>
-      ))}
+      {/* Errors — only show non-offender errors since offenders is now links-only */}
+      {Object.entries(errors)
+        .filter(([key]) => key !== "offenders")
+        .map(([key, msg]) => (
+          <div key={key} className="mb-3 px-4 py-2 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">
+            {key}: {msg}
+          </div>
+        ))}
 
-      {/* Results — only show after first search */}
+      {/* Results */}
       {searchAddr && !loading && (
         <>
           {/* Info banner */}
@@ -132,7 +132,7 @@ export default function SafeCirclePage() {
           </div>
 
           {/* Metrics */}
-          <div className="grid grid-cols-4 gap-3 mb-5">
+          <div className="grid grid-cols-3 gap-3 mb-5">
             <div className={`rounded-xl px-4 py-3 text-center ${riskStyle}`}>
               <div className="text-xl font-medium">{riskLevel}</div>
               <div className="text-xs mt-0.5 opacity-70">Risk level</div>
@@ -142,20 +142,15 @@ export default function SafeCirclePage() {
               <div className="text-xs text-gray-400 mt-0.5">Total crimes</div>
             </div>
             <div className="bg-gray-50 rounded-xl px-4 py-3 text-center">
-              <div className="text-xl font-medium text-red-700">{data.offenders.length}</div>
-              <div className="text-xs text-gray-400 mt-0.5">Sex offenders</div>
-            </div>
-            <div className="bg-gray-50 rounded-xl px-4 py-3 text-center">
-              <div className="text-xl font-medium text-red-700">{tier3Count}</div>
-              <div className="text-xs text-gray-400 mt-0.5">Tier 3 (high risk)</div>
+              <div className="text-xl font-medium text-red-700">{violentCount}</div>
+              <div className="text-xs text-gray-400 mt-0.5">Violent crimes</div>
             </div>
           </div>
 
-          {/* Alert banner if high risk */}
+          {/* High risk alert */}
           {riskLevel === "HIGH" && (
             <div className="mb-5 px-4 py-3 bg-red-50 text-red-800 text-sm rounded-lg border border-red-200">
-              <strong>High-risk area.</strong> {tier3Count} Tier 3 sex offenders and {violentCount} violent crimes
-              reported within 0.5 miles in the past 14 days. Stay alert and share this with people you care about.
+              <strong>High-risk area.</strong> {violentCount} violent crimes reported within 0.5 miles in the past 14 days.
             </div>
           )}
 
@@ -165,11 +160,7 @@ export default function SafeCirclePage() {
               <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">Map</p>
               <div className="rounded-xl overflow-hidden border border-gray-100 h-64">
                 <Suspense fallback={<div className="h-full bg-gray-50 flex items-center justify-center text-sm text-gray-400">Loading map…</div>}>
-                  <SafeCircleMap
-                    center={data.center}
-                    crimes={data.crimes}
-                    offenders={data.offenders}
-                  />
+                  <SafeCircleMap center={data.center} crimes={data.crimes} offenders={[]} />
                 </Suspense>
               </div>
             </div>
@@ -181,7 +172,6 @@ export default function SafeCirclePage() {
               Reported crimes nearby ({data.crimes.length})
             </p>
             <div className="bg-white border border-gray-100 rounded-xl p-4">
-              {/* Filter pills */}
               <div className="flex gap-2 flex-wrap mb-3">
                 {["all","violent","property","drug","other"].map((cat) => (
                   <button
@@ -193,7 +183,9 @@ export default function SafeCirclePage() {
                         : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
                     }`}
                   >
-                    {cat === "all" ? `All (${data.crimes.length})` : `${cat.charAt(0).toUpperCase()+cat.slice(1)} (${data.crimes.filter(c=>categorizeCrime(c)===cat).length})`}
+                    {cat === "all"
+                      ? `All (${data.crimes.length})`
+                      : `${cat.charAt(0).toUpperCase() + cat.slice(1)} (${data.crimes.filter((c) => categorizeCrime(c) === cat).length})`}
                   </button>
                 ))}
               </div>
@@ -230,54 +222,30 @@ export default function SafeCirclePage() {
             </div>
           </div>
 
-          {/* Sex offenders */}
+          {/* Sex Offenders — direct links, no API */}
           <div className="mb-5">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">
-              Registered sex offenders within 0.5 mi ({data.offenders.length})
+              Registered sex offenders within 0.5 mi
             </p>
             <div className="bg-white border border-gray-100 rounded-xl p-4">
-              <p className="text-xs text-gray-400 mb-3 pb-3 border-b border-gray-50">
-                Tier 3 = highest risk of re-offense · Tier 2 = moderate · Tier 1 = lower risk.
-                Click any name to view full registry record.
+              <p className="text-sm text-gray-500 mb-3">
+                Use the links below to search for registered sex offenders near this address. The address has been pre-filled for you.
               </p>
-
-              {data.offenders.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">No registered offenders found.</p>
-              ) : (
-                data.offenders.map((o) => {
-                  const tierKey = String(o.tier ?? "").replace(/tier\s*/i, "").trim();
-                  return (
-                    <div key={o.offenderId} className="grid grid-cols-[36px_1fr_auto] gap-3 items-center py-2 border-b border-gray-50 last:border-0">
-                      <div className="w-8 h-8 rounded-full bg-red-50 text-red-700 flex items-center justify-center text-xs font-medium">
-                        {o.firstName.charAt(0)}{o.lastName.charAt(0)}
-                      </div>
-                      <div>
-                        <a
-                          href={o.registryUrl || NSOPW_URL}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm font-medium hover:underline text-gray-900"
-                        >
-                          {o.firstName} {o.lastName}
-                        </a>
-                        <div className="text-xs text-gray-400">
-                          {o.offenseDescription} · {o.address}, {o.city}
-                          {o.distanceMi != null ? ` · ${o.distanceMi} mi` : ""}
-                        </div>
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TIER_COLOR[tierKey] ?? "bg-gray-100 text-gray-600"}`}>
-                        {o.tier ? `Tier ${tierKey}` : "—"}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-
-              <div className="pt-3 mt-2 border-t border-gray-50 flex gap-4">
-                <a href={NSOPW_URL} target="_blank" rel="noopener noreferrer" className="text-xs text-red-600 hover:underline">
+              <div className="pt-3 border-t border-gray-50 flex gap-4">
+                <a
+                  href={buildNSOPWUrl(searchAddr)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-red-600 hover:underline font-medium"
+                >
                   National Sex Offender Registry ↗
                 </a>
-                <a href={TN_SOR_URL} target="_blank" rel="noopener noreferrer" className="text-xs text-red-600 hover:underline">
+                <a
+                  href={TN_SOR_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-red-600 hover:underline font-medium"
+                >
                   Tennessee SOR ↗
                 </a>
               </div>
@@ -290,36 +258,19 @@ export default function SafeCirclePage() {
               Shelby County warrant check
             </p>
             <div className="bg-white border border-gray-100 rounded-xl p-4">
-              {data.warrants ? (
-                <>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm text-gray-700">Active warrants at this address</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${data.warrants.found ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"}`}>
-                      {data.warrants.found ? `${data.warrants.count} found` : "None found"}
-                    </span>
-                  </div>
-
-                  {data.warrants.warrants.map((w, i) => (
-                    <div key={i} className="py-2 border-b border-gray-50 last:border-0 text-sm">
-                      <div className="font-medium">{w.name}</div>
-                      <div className="text-xs text-gray-400">{w.chargeDescription} · Warrant #{w.warrantNumber} · {w.issueDate}</div>
-                    </div>
-                  ))}
-                </>
-              ) : (
-                <p className="text-sm text-gray-400">Warrant data unavailable. Search directly below.</p>
-              )}
-
-              <div className="pt-3 mt-2 border-t border-gray-50 flex gap-3">
+              <p className="text-sm text-gray-500 mb-3">
+                Use the direct search link below — the address has been pre-filled for you.
+              </p>
+              <div className="pt-3 border-t border-gray-50 flex gap-3">
                 <a
-                  href={data.warrants?.search_url ?? `${WARRANT_BASE}?w=&l=&f=&s=4128&st=weymouth`}
+                  href={buildWarrantUrl(searchAddr)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-amber-700 hover:underline"
+                  className="text-xs text-amber-700 hover:underline font-medium"
                 >
                   Shelby County warrant search ↗
                 </a>
-                <a href={JAIL_URL} target="_blank" rel="noopener noreferrer" className="text-xs text-amber-700 hover:underline">
+                <a href={JAIL_URL} target="_blank" rel="noopener noreferrer" className="text-xs text-amber-700 hover:underline font-medium">
                   Shelby County jail roster ↗
                 </a>
               </div>
@@ -333,7 +284,9 @@ export default function SafeCirclePage() {
               {data.contacts.length > 0 ? (
                 data.contacts.map((c) => (
                   <div key={c.type} className="bg-gray-50 rounded-xl p-3">
-                    <div className="text-xs font-medium text-gray-700 mb-1 capitalize">{c.type === "police" ? "Police" : c.type === "fire" ? "Fire" : "Hospital"}</div>
+                    <div className="text-xs font-medium text-gray-700 mb-1 capitalize">
+                      {c.type === "police" ? "Police" : c.type === "fire" ? "Fire" : "Hospital"}
+                    </div>
                     <div className="text-xs text-gray-500 mb-2 leading-snug">{c.name}</div>
                     <a href={`tel:${c.phone.replace(/\D/g, "")}`} className="text-sm text-blue-600 hover:underline">
                       {c.phone || "—"}
@@ -353,7 +306,9 @@ export default function SafeCirclePage() {
                     <div key={c.type} className="bg-gray-50 rounded-xl p-3">
                       <div className="text-xs font-medium text-gray-700 mb-1">{c.type}</div>
                       <div className="text-xs text-gray-500 mb-2">{c.name}</div>
-                      <a href={`tel:${c.phone.replace(/\D/g,"")}`} className="text-sm text-blue-600 hover:underline">{c.phone}</a>
+                      <a href={`tel:${c.phone.replace(/\D/g, "")}`} className="text-sm text-blue-600 hover:underline">
+                        {c.phone}
+                      </a>
                     </div>
                   ))}
                 </>

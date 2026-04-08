@@ -1,18 +1,27 @@
-import type { ReactNode } from "react";
+/**
+ * app/layout.tsx
+ */
 
-export const metadata = {
-  title: "Safe Circle",
-  description: "Safe Circle",
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "SafeCircle",
+  description: "Neighborhood safety · Shelby County, TN",
 };
 
 export default function RootLayout({
   children,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <head>
+        <script src="https://cdn.tailwindcss.com"></script>
+      </head>
+      <body className="bg-white text-gray-900 antialiased">
+        {children}
+      </body>
     </html>
   );
 }

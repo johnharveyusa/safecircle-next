@@ -6,9 +6,6 @@
  *
  * Required env vars:
  *   GOOGLE_MAPS_API_KEY  — must have Places API enabled
- *
- * Each result includes:
- *   name, address, phone (from Place Details), distance_mi, maps_url
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -115,21 +112,18 @@ export async function GET(req: NextRequest) {
           contacts.push({
             type,
             name: String(details?.name ?? nearby.name ?? ""),
-            address: String(
-              details?.formatted_address ?? nearby.vicinity ?? ""
-            ),
+            address: String(details?.formatted_address ?? nearby.vicinity ?? ""),
             phone: String(details?.formatted_phone_number ?? ""),
             distance_mi: distanceMi,
             maps_url: `https://www.google.com/maps/place/?q=place_id:${placeId}`,
             place_id: placeId,
           });
         } catch {
-          // Skip this contact type if lookup fails; others still returned
+          // Skip this contact type if lookup fails
         }
       })
     );
 
-    // Sort by type order: police, fire, hospital
     const order = ["police", "fire", "hospital"];
     contacts.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
 
