@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { MapContainer, TileLayer, CircleMarker, Circle, Popup, useMap } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
 import type { CrimeIncident } from "@/app/api/crimes/route";
 import type { SexOffender } from "@/app/api/offenders/route";
 
