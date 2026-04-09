@@ -1,6 +1,3 @@
-Here's your complete `package.json` — copy and paste this entire thing over your existing file:
-
-```json
 {
   "name": "safecircle",
   "version": "0.1.0",
@@ -29,12 +26,3 @@ Here's your complete `package.json` — copy and paste this entire thing over yo
     "postcss": "^8"
   }
 }
-```
-
-Key changes from what you had:
-- Next.js downgraded to **14.2.5** (stable, no security warning)
-- React downgraded to **18.3.1** (compatible with react-leaflet)
-- All leaflet packages included
-- All type definitions included
-
-Paste this in, commit, and tell me what the build log says.
