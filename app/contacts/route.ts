@@ -1,18 +1,14 @@
 /**
  * app/api/contacts/route.ts
- *
- * Finds the nearest police station, fire station, and hospital to a given
- * address using the Google Places Nearby Search API.
- *
- * Required env vars:
- *   GOOGLE_MAPS_API_KEY  — must have Places API enabled
+ * Finds nearest police, fire, hospital using Google Places API
+ * Requires GOOGLE_MAPS_API_KEY environment variable
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { geocodeAddress, LatLng } from "@/lib/geocode";
 
 const PLACES_BASE = "https://maps.googleapis.com/maps/api/place";
-const SEARCH_RADIUS_METERS = 8000; // 5 miles
+const SEARCH_RADIUS_METERS = 8000;
 
 export interface EmergencyContact {
   type: "police" | "fire" | "hospital";
@@ -24,10 +20,10 @@ export interface EmergencyContact {
   place_id: string;
 }
 
-const PLACE_TYPES: { type: EmergencyContact["type"]; keyword: string; googleType: string }[] = [
-  { type: "police", keyword: "police precinct", googleType: "police" },
-  { type: "fire", keyword: "fire station", googleType: "fire_station" },
-  { type: "hospital", keyword: "hospital emergency", googleType: "hospital" },
+const PLACE_TYPES: { type: EmergencyContact["type"]; googleType: string }[] = [
+  { type: "police", googleType: "police" },
+  { type: "fire", googleType: "fire_station" },
+  { type: "hospital", googleType: "hospital" },
 ];
 
 function haversineDistanceMi(a: LatLng, b: LatLng): number {
@@ -42,41 +38,6 @@ function haversineDistanceMi(a: LatLng, b: LatLng): number {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-async function fetchNearby(
-  center: LatLng,
-  googleType: string,
-  key: string
-): Promise<Record<string, unknown> | null> {
-  const params = new URLSearchParams({
-    location: `${center.lat},${center.lng}`,
-    radius: String(SEARCH_RADIUS_METERS),
-    type: googleType,
-    key,
-  });
-
-  const res = await fetch(`${PLACES_BASE}/nearbysearch/json?${params}`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  const results = data.results as Record<string, unknown>[];
-  return results?.[0] ?? null;
-}
-
-async function fetchPlaceDetails(
-  placeId: string,
-  key: string
-): Promise<Record<string, unknown> | null> {
-  const params = new URLSearchParams({
-    place_id: placeId,
-    fields: "name,formatted_address,formatted_phone_number,geometry",
-    key,
-  });
-
-  const res = await fetch(`${PLACES_BASE}/details/json?${params}`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  return (data.result as Record<string, unknown>) ?? null;
-}
-
 export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get("address");
   if (!address) {
@@ -85,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) {
-    return NextResponse.json({ error: "GOOGLE_MAPS_API_KEY not set" }, { status: 500 });
+    return NextResponse.json({ error: "GOOGLE_MAPS_API_KEY not configured" }, { status: 500 });
   }
 
   try {
@@ -95,17 +56,34 @@ export async function GET(req: NextRequest) {
     await Promise.all(
       PLACE_TYPES.map(async ({ type, googleType }) => {
         try {
-          const nearby = await fetchNearby(center, googleType, key);
+          const nearbyParams = new URLSearchParams({
+            location: `${center.lat},${center.lng}`,
+            radius: String(SEARCH_RADIUS_METERS),
+            type: googleType,
+            key,
+          });
+
+          const nearbyRes = await fetch(`${PLACES_BASE}/nearbysearch/json?${nearbyParams}`);
+          if (!nearbyRes.ok) return;
+          const nearbyData = await nearbyRes.json();
+          const nearby = nearbyData.results?.[0];
           if (!nearby) return;
 
           const placeId = String(nearby.place_id ?? "");
-          const details = placeId ? await fetchPlaceDetails(placeId, key) : null;
-          const loc = (nearby.geometry as Record<string, unknown>)?.location as
-            | Record<string, number>
-            | undefined;
 
+          // Get phone number from place details
+          const detailParams = new URLSearchParams({
+            place_id: placeId,
+            fields: "name,formatted_address,formatted_phone_number,geometry",
+            key,
+          });
+          const detailRes = await fetch(`${PLACES_BASE}/details/json?${detailParams}`);
+          const detailData = detailRes.ok ? await detailRes.json() : null;
+          const details = detailData?.result;
+
+          const loc = nearby.geometry?.location;
           const distanceMi =
-            loc?.lat != null && loc?.lng != null
+            loc?.lat != null
               ? Math.round(haversineDistanceMi(center, { lat: loc.lat, lng: loc.lng }) * 10) / 10
               : null;
 
@@ -119,13 +97,15 @@ export async function GET(req: NextRequest) {
             place_id: placeId,
           });
         } catch {
-          // Skip this contact type if lookup fails
+          // Skip if this type fails
         }
       })
     );
 
-    const order = ["police", "fire", "hospital"];
-    contacts.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
+    contacts.sort((a, b) =>
+      ["police", "fire", "hospital"].indexOf(a.type) -
+      ["police", "fire", "hospital"].indexOf(b.type)
+    );
 
     return NextResponse.json({ address, center, contacts });
   } catch (err: unknown) {
