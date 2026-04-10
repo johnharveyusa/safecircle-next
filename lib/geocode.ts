@@ -1,13 +1,9 @@
 /**
  * lib/geocode.ts
- *
- * Geocodes a free-text address to { lat, lng } using the free
- * ArcGIS World Geocoding Service — no API key required.
- *
- * Same geocoder used by the MPD public safety HTML prototype.
+ * Shared geocoding utilities using ESRI ArcGIS World Geocoder
  */
 
-const ARCGIS_GEOCODE_URL =
+const GEOCODE_URL =
   "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
 
 export interface LatLng {
@@ -15,18 +11,12 @@ export interface LatLng {
   lng: number;
 }
 
-export async function geocodeAddress(address: string): Promise<LatLng> {
-  const url = new URL(ARCGIS_GEOCODE_URL);
-  url.searchParams.set("SingleLine", address);
-  url.searchParams.set("maxLocations", "1");
-  url.searchParams.set("outFields", "*");
-  url.searchParams.set("f", "pjson");
-
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`ArcGIS geocoder HTTP error ${res.status}`);
-
+export async function geocodeAddress(address: string): Promise<LatLng & { matched: string }> {
+  const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(address)}&maxLocations=1&outFields=*&f=pjson`;
+  const res = await fetch(url);
   const data = await res.json();
-  if (!data.candidates || !data.candidates.length) {
+
+  if (!data.candidates?.length) {
     throw new Error(`Address not found: ${address}`);
   }
 
@@ -34,16 +24,14 @@ export async function geocodeAddress(address: string): Promise<LatLng> {
   return {
     lat: best.location.y,
     lng: best.location.x,
+    matched: best.address,
   };
 }
 
-/**
- * Parse a Shelby County address string into warrant search params.
- * e.g. "4128 Weymouth Cove" -> { s: "4128", st: "weymouth" }
- */
 export function parseWarrantParams(address: string): { s: string; st: string } {
-  const parts = address.trim().split(/\s+/);
-  const s = parts[0] ?? "";
-  const st = (parts[1] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  // Parse "4128 Weymouth Cove, Memphis TN" → s="4128", st="weymouth"
+  const parts = address.trim().split(",")[0].trim().split(/\s+/);
+  const s = /^\d+$/.test(parts[0]) ? parts[0] : "";
+  const st = (s ? parts[1] : parts[0])?.toLowerCase() ?? "";
   return { s, st };
 }
