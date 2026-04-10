@@ -1,60 +1,18 @@
 /**
  * app/api/crimes/route.ts
- *
- * Fetches Memphis MPD incidents from the Socrata open data portal.
- * Dataset: puh4-eea4  (updated dataset as of 2024, daily at 6am)
- * Docs:    https://data.memphistn.gov/Public-Safety/Memphis-Police-Department-Public-Safety-Incidents/puh4-eea4
- *
- * Query strategy:
- *   - Geocode the supplied address to lat/lng
- *   - Use Socrata's `$where` with `within_circle()` for a 0.5-mile (804m) radius
- *   - Filter to the past 14 days via `offense_date`
- *   - Return up to 200 records, ordered newest-first
- *
- * NOTE: Sex crimes and juvenile-specific crimes are OMITTED from this dataset
- *       per Memphis MPD policy. Use the NSOPW route for offender data.
+ * Fetches Memphis MPD incidents from ESRI ArcGIS - same source as v5.7.3
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { geocodeAddress } from "@/lib/geocode";
 
-const SOCRATA_HOST = "data.memphistn.gov";
-const DATASET_ID = "puh4-eea4";
-const RADIUS_METERS = 804; // 0.5 miles
+const GEOCODE_URL =
+  "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
+const MPD_QUERY_URL =
+  "https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0/query";
+
+const RADIUS_MILES = 0.5;
+const RADIUS_METERS = RADIUS_MILES * 1609.344;
 const DAYS_BACK = 14;
-const MAX_ROWS = 200;
-
-export interface CrimeIncident {
-  crime_id: string;
-  offense_date: string;
-  offense_type: string;
-  category: string;
-  address: string;
-  lat: number | null;
-  lng: number | null;
-  distance_mi?: number;
-}
-
-function milesAgo(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString();
-}
-
-function haversineDistanceMi(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number
-): number {
-  const R = 3958.8;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get("address");
@@ -63,72 +21,58 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { lat, lng } = await geocodeAddress(address);
-    const since = milesAgo(DAYS_BACK);
+    // Step 1: Geocode the address using ESRI
+    const geoRes = await fetch(
+      `${GEOCODE_URL}?SingleLine=${encodeURIComponent(address)}&maxLocations=1&outFields=*&f=pjson`
+    );
+    const geoData = await geoRes.json();
 
-    // Socrata SODA query
-    const params = new URLSearchParams({
-      $where: `within_circle(geocoded_column, ${lat}, ${lng}, ${RADIUS_METERS}) AND offense_date >= '${since}'`,
-      $order: "offense_date DESC",
-      $limit: String(MAX_ROWS),
-    });
-
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-    };
-    if (process.env.SOCRATA_APP_TOKEN) {
-      headers["X-App-Token"] = process.env.SOCRATA_APP_TOKEN;
+    if (!geoData.candidates?.length) {
+      return NextResponse.json({ error: "Address not found" }, { status: 404 });
     }
 
-    const url = `https://${SOCRATA_HOST}/resource/${DATASET_ID}.json?${params}`;
-    const res = await fetch(url, { headers, next: { revalidate: 3600 } });
+    const best = geoData.candidates[0];
+    const lat = best.location.y;
+    const lng = best.location.x;
 
-    if (!res.ok) {
-      const text = await res.text();
+    // Step 2: Query MPD incidents from ESRI - exactly like v5.7.3
+    const end = Date.now();
+    const start = end - DAYS_BACK * 24 * 60 * 60 * 1000;
+
+    const params = new URLSearchParams({
+      where: "1=1",
+      geometry: JSON.stringify({ x: lng, y: lat, spatialReference: { wkid: 4326 } }),
+      geometryType: "esriGeometryPoint",
+      inSR: "4326",
+      spatialRel: "esriSpatialRelIntersects",
+      distance: String(RADIUS_METERS),
+      units: "esriSRUnit_Meter",
+      outFields:
+        "Offense_Datetime,UCR_Category,UCR_Description,Street_Address,Latitude,Longitude,Precinct,Crime_ID",
+      orderByFields: "Offense_Datetime DESC",
+      resultRecordCount: "200",
+      returnGeometry: "false",
+      time: `${start},${end}`,
+      f: "json",
+    });
+
+    const mpdRes = await fetch(`${MPD_QUERY_URL}?${params}`);
+    const mpdData = await mpdRes.json();
+
+    if (mpdData.error) {
       return NextResponse.json(
-        { error: `Socrata error ${res.status}`, detail: text },
+        { error: mpdData.error.message || "MPD query error" },
         { status: 502 }
       );
     }
 
-    const raw: Record<string, string>[] = await res.json();
-
-    const incidents: CrimeIncident[] = raw.map((r) => {
-      const incLat =
-        r.latitude != null
-          ? parseFloat(r.latitude)
-          : r.geocoded_column?.latitude != null
-          ? parseFloat(r.geocoded_column.latitude)
-          : null;
-      const incLng =
-        r.longitude != null
-          ? parseFloat(r.longitude)
-          : r.geocoded_column?.longitude != null
-          ? parseFloat(r.geocoded_column.longitude)
-          : null;
-
-      return {
-        crime_id: r.crime_id ?? r.incident_id ?? "",
-        offense_date: r.offense_date ?? "",
-        offense_type: r.agency_crimetype_id ?? r.offense_type ?? r.crime_type ?? "Unknown",
-        category: r.category ?? r.crime_category ?? "Other",
-        address: r["100_block_address"] ?? r.block_address ?? r.location_description ?? "",
-        lat: incLat,
-        lng: incLng,
-        distance_mi:
-          incLat != null && incLng != null
-            ? Math.round(haversineDistanceMi(lat, lng, incLat, incLng) * 10) / 10
-            : undefined,
-      };
-    });
-
     return NextResponse.json({
-      address,
+      address: best.address,
       center: { lat, lng },
-      count: incidents.length,
+      count: (mpdData.features || []).length,
       days_back: DAYS_BACK,
-      radius_mi: 0.5,
-      incidents,
+      radius_mi: RADIUS_MILES,
+      incidents: mpdData.features || [],
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
