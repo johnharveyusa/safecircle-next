@@ -6,13 +6,6 @@ import type { CrimeIncident } from "@/app/api/crimes/route";
 
 const SafeCircleMap = lazy(() => import("@/components/SafeCircleMap"));
 
-const CAT_COLORS: Record<string, { text: string; bg: string; border: string }> = {
-  violent:  { text: "text-red-700",    bg: "bg-red-50",    border: "border-red-200" },
-  property: { text: "text-blue-700",   bg: "bg-blue-50",   border: "border-blue-200" },
-  drug:     { text: "text-amber-700",  bg: "bg-amber-50",  border: "border-amber-200" },
-  other:    { text: "text-gray-600",   bg: "bg-gray-50",   border: "border-gray-200" },
-};
-
 function categorizeCrime(c: CrimeIncident): string {
   const t = (c.offense_type + " " + c.category).toLowerCase();
   if (/assault|robbery|weapon|homicide|rape|kidnap/.test(t)) return "violent";
@@ -20,6 +13,13 @@ function categorizeCrime(c: CrimeIncident): string {
   if (/theft|burglary|auto|vandal|arson|break/.test(t)) return "property";
   return "other";
 }
+
+const CAT_STYLE: Record<string, { color: string; background: string; border: string }> = {
+  violent:  { color: "#b91c1c", background: "#fef2f2", border: "#fca5a5" },
+  property: { color: "#1d4ed8", background: "#eff6ff", border: "#93c5fd" },
+  drug:     { color: "#b45309", background: "#fffbeb", border: "#fcd34d" },
+  other:    { color: "#4b5563", background: "#f9fafb", border: "#d1d5db" },
+};
 
 const WARRANT_BASE = "https://warrants.shelby-sheriff.org/w_warrant_result.php";
 const JAIL_URL = "https://imljail.shelbycountytn.gov/IML";
@@ -65,320 +65,226 @@ export default function SafeCirclePage() {
     window.location.href = "tel:911";
   }
 
-  const filteredCrimes =
-    crimeFilter === "all"
-      ? data.crimes
-      : data.crimes.filter((c) => categorizeCrime(c) === crimeFilter);
+  const filteredCrimes = crimeFilter === "all"
+    ? data.crimes
+    : data.crimes.filter((c) => categorizeCrime(c) === crimeFilter);
 
   const violentCount = data.crimes.filter((c) => categorizeCrime(c) === "violent").length;
+  const riskLevel = violentCount >= 5 ? "HIGH" : violentCount >= 2 ? "MODERATE" : "LOW";
+  const riskColor = riskLevel === "HIGH" ? "#b91c1c" : riskLevel === "MODERATE" ? "#b45309" : "#15803d";
+  const riskBg = riskLevel === "HIGH" ? "#fef2f2" : riskLevel === "MODERATE" ? "#fffbeb" : "#f0fdf4";
+  const riskBorder = riskLevel === "HIGH" ? "#fca5a5" : riskLevel === "MODERATE" ? "#fcd34d" : "#86efac";
 
-  const riskLevel =
-    violentCount >= 5 ? "HIGH" : violentCount >= 2 ? "MODERATE" : "LOW";
-
-  const riskStyle =
-    riskLevel === "HIGH"
-      ? "text-red-700 bg-red-50 border-red-300"
-      : riskLevel === "MODERATE"
-      ? "text-amber-700 bg-amber-50 border-amber-300"
-      : "text-green-700 bg-green-50 border-green-300";
+  const page: React.CSSProperties = { maxWidth: 800, margin: "0 auto", padding: "0 16px 64px", fontFamily: "Segoe UI, sans-serif", fontSize: 15 };
+  const card = (bc: string, bg: string): React.CSSProperties => ({ marginBottom: 20, borderRadius: 14, border: `2px solid ${bc}`, background: bg, overflow: "hidden" });
+  const cardHeader = (bg: string): React.CSSProperties => ({ background: bg, padding: "12px 20px", display: "flex", alignItems: "center", gap: 8 });
+  const cardBody: React.CSSProperties = { padding: "16px 20px" };
+  const btn = (bg: string, color: string, border?: string): React.CSSProperties => ({
+    display: "inline-block", padding: "9px 18px", background: bg, color, fontWeight: 700, fontSize: 14,
+    border: border ? `2px solid ${border}` : "none", borderRadius: 10, cursor: "pointer",
+    textDecoration: "none", marginRight: 10, marginBottom: 8
+  });
 
   return (
-    <main className="max-w-3xl mx-auto px-4 pb-16" style={{ fontSize: 15 }}>
+    <main style={page}>
 
       {/* Header */}
-      <div className="flex items-center justify-between py-5 border-b border-gray-200 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center shadow">
-            <svg className="w-6 h-6 fill-white" viewBox="0 0 24 24">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 0", borderBottom: "2px solid #e5e7eb", marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: "50%", background: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="24" height="24" fill="white" viewBox="0 0 24 24">
               <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5L12 1z" />
             </svg>
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">SafeCircle</h1>
-            <p className="text-sm text-gray-500">Neighborhood Safety · Shelby County, TN</p>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#111827" }}>SafeCircle</h1>
+            <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>Neighborhood Safety · Shelby County, TN</p>
           </div>
         </div>
-        {/* SOS Button — always visible */}
-        <button
-          onClick={handleSOS}
-          className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-base shadow-lg"
-          style={{ animation: "pulse 2s infinite" }}
-        >
+        <button style={{ padding: "10px 20px", background: "#dc2626", color: "#fff", fontWeight: 700, fontSize: 16, border: "none", borderRadius: 12, cursor: "pointer", boxShadow: "0 4px 12px rgba(220,38,38,0.4)" }} onClick={handleSOS}>
           🆘 {sosTriggered ? "Calling 911…" : "SOS"}
         </button>
       </div>
 
       {/* Search */}
-      <div className="flex gap-3 mb-6">
+      <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
         <input
-          className="flex-1 h-12 px-4 border-2 border-gray-300 rounded-xl text-base focus:outline-none focus:border-blue-500"
+          style={{ flex: 1, height: 48, padding: "0 16px", border: "2px solid #d1d5db", borderRadius: 12, fontSize: 15, outline: "none" }}
           value={inputAddr}
           onChange={(e) => setInputAddr(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
           placeholder="Enter address in Shelby County, TN"
         />
-        <button
-          className="px-6 h-12 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-base font-bold shadow disabled:opacity-50"
-          onClick={handleSearch}
-          disabled={loading}
-        >
-          {loading ? "Checking…" : "🔍 Check"}
+        <button style={{ padding: "0 24px", height: 48, background: "#1d4ed8", color: "#fff", fontWeight: 700, fontSize: 15, border: "none", borderRadius: 12, cursor: "pointer" }}
+          onClick={handleSearch} disabled={loading}>
+          {loading ? "Checking…" : "🔍 Check Address"}
         </button>
       </div>
 
       {/* Errors */}
-      {Object.entries(errors)
-        .filter(([key]) => key !== "offenders")
-        .map(([key, msg]) => (
-          <div key={key} className="mb-3 px-4 py-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-200">
-            ⚠️ {key}: {msg}
-          </div>
-        ))}
+      {Object.entries(errors).filter(([key]) => key !== "offenders").map(([key, msg]) => (
+        <div key={key} style={{ marginBottom: 12, padding: "12px 16px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 12, color: "#b91c1c", fontSize: 14 }}>
+          ⚠️ {key}: {msg}
+        </div>
+      ))}
 
-      {/* Results */}
       {searchAddr && !loading && (
         <>
           {/* Info banner */}
-          <div className="mb-5 px-4 py-3 bg-blue-50 text-blue-900 text-sm rounded-xl border border-blue-200">
-            Results for: <strong>{searchAddr}</strong> &nbsp;·&nbsp; Crimes: past 14 days, 0.5 mi radius
+          <div style={{ marginBottom: 20, padding: "12px 16px", background: "#eff6ff", border: "1px solid #93c5fd", borderRadius: 12, color: "#1e40af", fontSize: 14 }}>
+            Results for: <strong>{searchAddr}</strong> · Crimes: past 14 days, 0.5 mi radius
           </div>
 
           {/* Metrics */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <div className={`rounded-xl px-4 py-4 text-center border-2 ${riskStyle}`}>
-              <div className="text-2xl font-bold">{riskLevel}</div>
-              <div className="text-sm mt-1 font-medium">Risk level</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+            <div style={{ background: riskBg, border: `2px solid ${riskBorder}`, borderRadius: 14, padding: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: riskColor }}>{riskLevel}</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>Risk Level</div>
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 text-center">
-              <div className="text-2xl font-bold text-red-600">{data.crimes.length}</div>
-              <div className="text-sm text-gray-500 mt-1">Total crimes</div>
+            <div style={{ background: "#f9fafb", border: "2px solid #e5e7eb", borderRadius: 14, padding: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#dc2626" }}>{data.crimes.length}</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>Total Crimes</div>
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 text-center">
-              <div className="text-2xl font-bold text-red-700">{violentCount}</div>
-              <div className="text-sm text-gray-500 mt-1">Violent crimes</div>
-            </div>
-          </div>
-
-          {/* High risk alert */}
-          {riskLevel === "HIGH" && (
-            <div className="mb-5 px-4 py-3 bg-red-50 text-red-800 text-sm rounded-xl border-2 border-red-300 font-medium">
-              🚨 <strong>High-risk area.</strong> {violentCount} violent crimes within 0.5 miles in the past 14 days.
-            </div>
-          )}
-
-          {/* ── WARRANTS ── prominent card */}
-          <div className="mb-5 rounded-xl border-2 border-amber-400 bg-amber-50 overflow-hidden">
-            <div className="bg-amber-500 px-5 py-3 flex items-center gap-2">
-              <span className="text-xl">🔎</span>
-              <span className="text-white font-bold text-base">Shelby County Warrant Search</span>
-            </div>
-            <div className="px-5 py-4">
-              <p className="text-sm text-amber-900 mb-4">
-                Check active warrants for this address with the Shelby County Sheriff's Office. Written by John Harvey in 1989 — still working today.
-              </p>
-              <div className="flex gap-3 flex-wrap">
-                <a
-                  href={buildWarrantUrl(searchAddr)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm shadow"
-                >
-                  🔍 Search Warrants by Address ↗
-                </a>
-                <a
-                  href={`${WARRANT_BASE}?w=&l=&f=&s=&st=`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-5 py-2 bg-white hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-sm border-2 border-amber-400"
-                >
-                  Search by Name ↗
-                </a>
-                <a
-                  href={JAIL_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-5 py-2 bg-white hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-sm border-2 border-amber-400"
-                >
-                  🔒 Jail Roster ↗
-                </a>
-              </div>
+            <div style={{ background: "#f9fafb", border: "2px solid #e5e7eb", borderRadius: 14, padding: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#dc2626" }}>{violentCount}</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>Violent Crimes</div>
             </div>
           </div>
 
-          {/* ── CRIMES ── */}
-          <div className="mb-5 rounded-xl border-2 border-blue-400 bg-white overflow-hidden">
-            <div className="bg-blue-600 px-5 py-3 flex items-center gap-2">
-              <span className="text-xl">🚨</span>
-              <span className="text-white font-bold text-base">Reported Crimes Nearby ({data.crimes.length})</span>
+          {/* WARRANTS */}
+          <div style={card("#f59e0b", "#fffbeb")}>
+            <div style={cardHeader("#d97706")}>
+              <span style={{ fontSize: 20 }}>🔎</span>
+              <h2 style={{ margin: 0, color: "#fff", fontWeight: 700, fontSize: 16 }}>Shelby County Warrant Search</h2>
             </div>
-            <div className="px-5 py-4">
-              <div className="flex gap-2 flex-wrap mb-4">
+            <div style={cardBody}>
+              <p style={{ color: "#78350f", marginBottom: 14, fontSize: 14 }}>Check active warrants by address or name. Written by John Harvey in 1989 — still working today.</p>
+              <a href={buildWarrantUrl(searchAddr)} target="_blank" rel="noopener noreferrer" style={btn("#d97706", "#fff")}>🔍 Search by Address ↗</a>
+              <a href={`${WARRANT_BASE}?w=&l=&f=&s=&st=`} target="_blank" rel="noopener noreferrer" style={btn("#fff", "#92400e", "#f59e0b")}>Search by Name ↗</a>
+              <a href={JAIL_URL} target="_blank" rel="noopener noreferrer" style={btn("#fff", "#92400e", "#f59e0b")}>🔒 Jail Roster ↗</a>
+            </div>
+          </div>
+
+          {/* CRIMES */}
+          <div style={card("#3b82f6", "#fff")}>
+            <div style={cardHeader("#2563eb")}>
+              <span style={{ fontSize: 20 }}>🚨</span>
+              <h2 style={{ margin: 0, color: "#fff", fontWeight: 700, fontSize: 16 }}>Reported Crimes Nearby ({data.crimes.length})</h2>
+            </div>
+            <div style={cardBody}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
                 {["all","violent","property","drug","other"].map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setCrimeFilter(cat)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium border-2 transition-colors ${
-                      crimeFilter === cat
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    {cat === "all"
-                      ? `All (${data.crimes.length})`
-                      : `${cat.charAt(0).toUpperCase() + cat.slice(1)} (${data.crimes.filter((c) => categorizeCrime(c) === cat).length})`}
+                  <button key={cat} onClick={() => setCrimeFilter(cat)} style={{
+                    padding: "6px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    border: crimeFilter === cat ? "2px solid #1d4ed8" : "2px solid #d1d5db",
+                    background: crimeFilter === cat ? "#1d4ed8" : "#fff",
+                    color: crimeFilter === cat ? "#fff" : "#4b5563"
+                  }}>
+                    {cat === "all" ? `All (${data.crimes.length})` : `${cat.charAt(0).toUpperCase() + cat.slice(1)} (${data.crimes.filter((c) => categorizeCrime(c) === cat).length})`}
                   </button>
                 ))}
               </div>
-
               {filteredCrimes.length === 0 ? (
-                <p className="text-base text-green-700 font-medium py-4 text-center">✅ No crimes found in this category.</p>
+                <p style={{ color: "#15803d", fontWeight: 600, textAlign: "center", padding: "16px 0" }}>✅ No crimes found in this category.</p>
               ) : (
-                <div className="space-y-2">
-                  {filteredCrimes.map((c) => {
-                    const cat = categorizeCrime(c);
-                    const colors = CAT_COLORS[cat];
-                    return (
-                      <div key={c.crime_id} className={`rounded-lg px-4 py-3 border ${colors.bg} ${colors.border}`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div className={`font-bold text-sm ${colors.text}`}>{c.offense_type}</div>
-                          <div className="text-xs text-gray-500 whitespace-nowrap">
-                            {new Date(c.offense_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            {c.distance_mi != null ? ` · ${c.distance_mi} mi` : ""}
-                          </div>
-                        </div>
-                        <div className="text-sm text-gray-600 mt-0.5">{c.address}</div>
+                filteredCrimes.map((c) => {
+                  const cat = categorizeCrime(c);
+                  return (
+                    <div key={c.crime_id} style={{ borderRadius: 10, padding: "10px 14px", border: `1px solid ${CAT_STYLE[cat].border}`, background: CAT_STYLE[cat].background, marginBottom: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <strong style={{ color: CAT_STYLE[cat].color, fontSize: 14 }}>{c.offense_type}</strong>
+                        <span style={{ color: "#6b7280", fontSize: 12 }}>
+                          {new Date(c.offense_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          {c.distance_mi != null ? ` · ${c.distance_mi} mi` : ""}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div style={{ color: "#4b5563", fontSize: 13, marginTop: 2 }}>{c.address}</div>
+                    </div>
+                  );
+                })
               )}
-              <div className="pt-3 mt-3 border-t border-gray-100">
-                <a
-                  href="https://data.memphistn.gov/Public-Safety/Memphis-Police-Department-Public-Safety-Incidents/puh4-eea4"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:underline"
-                >
+              <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 12, marginTop: 8 }}>
+                <a href="https://data.memphistn.gov/Public-Safety/Memphis-Police-Department-Public-Safety-Incidents/puh4-eea4" target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", fontSize: 13 }}>
                   Source: Memphis MPD Public Safety Incidents ↗
                 </a>
               </div>
             </div>
           </div>
 
-          {/* ── SEX OFFENDERS ── */}
-          <div className="mb-5 rounded-xl border-2 border-purple-400 bg-purple-50 overflow-hidden">
-            <div className="bg-purple-600 px-5 py-3 flex items-center gap-2">
-              <span className="text-xl">⚠️</span>
-              <span className="text-white font-bold text-base">Sex Offender Registry</span>
+          {/* SEX OFFENDERS */}
+          <div style={card("#a855f7", "#faf5ff")}>
+            <div style={cardHeader("#9333ea")}>
+              <span style={{ fontSize: 20 }}>⚠️</span>
+              <h2 style={{ margin: 0, color: "#fff", fontWeight: 700, fontSize: 16 }}>Sex Offender Registry</h2>
             </div>
-            <div className="px-5 py-4 flex gap-3 flex-wrap">
-              <a
-                href={buildNSOPWUrl(searchAddr)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm shadow"
-              >
-                National Registry (NSOPW) ↗
-              </a>
-              <a
-                href={TN_SOR_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-5 py-2 bg-white hover:bg-purple-100 text-purple-800 font-bold rounded-xl text-sm border-2 border-purple-400"
-              >
-                Tennessee SOR ↗
-              </a>
+            <div style={cardBody}>
+              <a href={buildNSOPWUrl(searchAddr)} target="_blank" rel="noopener noreferrer" style={btn("#9333ea", "#fff")}>National Registry (NSOPW) ↗</a>
+              <a href={TN_SOR_URL} target="_blank" rel="noopener noreferrer" style={btn("#fff", "#6b21a8", "#a855f7")}>Tennessee SOR ↗</a>
             </div>
           </div>
 
-          {/* ── MAP ── */}
+          {/* MAP */}
           {data.center && (
-            <div className="mb-5 rounded-xl border-2 border-teal-400 bg-white overflow-hidden">
-              <div className="bg-teal-600 px-5 py-3 flex items-center gap-2">
-                <span className="text-xl">🗺️</span>
-                <span className="text-white font-bold text-base">Crime Map</span>
+            <div style={card("#0d9488", "#fff")}>
+              <div style={cardHeader("#0f766e")}>
+                <span style={{ fontSize: 20 }}>🗺️</span>
+                <h2 style={{ margin: 0, color: "#fff", fontWeight: 700, fontSize: 16 }}>Crime Map</h2>
               </div>
-              <div className="h-72">
-                <Suspense fallback={<div className="h-full bg-gray-50 flex items-center justify-center text-sm text-gray-400">Loading map…</div>}>
+              <div style={{ height: 300 }}>
+                <Suspense fallback={<div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280" }}>Loading map…</div>}>
                   <SafeCircleMap center={data.center} crimes={data.crimes} offenders={[]} />
                 </Suspense>
               </div>
             </div>
           )}
 
-          {/* ── EMERGENCY CONTACTS ── */}
-          <div className="mb-5 rounded-xl border-2 border-green-400 bg-green-50 overflow-hidden">
-            <div className="bg-green-600 px-5 py-3 flex items-center gap-2">
-              <span className="text-xl">📍</span>
-              <span className="text-white font-bold text-base">Nearest Emergency Services</span>
+          {/* EMERGENCY CONTACTS */}
+          <div style={card("#22c55e", "#f0fdf4")}>
+            <div style={cardHeader("#16a34a")}>
+              <span style={{ fontSize: 20 }}>📍</span>
+              <h2 style={{ margin: 0, color: "#fff", fontWeight: 700, fontSize: 16 }}>Nearest Emergency Services</h2>
             </div>
-            <div className="px-5 py-4">
-              <div className="grid grid-cols-3 gap-3">
-                {data.contacts.length > 0 ? (
-                  data.contacts.map((c) => (
-                    <div key={c.type} className="bg-white rounded-xl p-3 border border-green-200 shadow-sm">
-                      <div className="text-sm font-bold text-green-800 mb-1 capitalize">
-                        {c.type === "police" ? "👮 Police" : c.type === "fire" ? "🚒 Fire" : "🏥 Hospital"}
-                      </div>
-                      <div className="text-sm text-gray-600 mb-2 leading-snug">{c.name}</div>
-                      <a href={`tel:${c.phone.replace(/\D/g, "")}`} className="text-base font-bold text-blue-600 hover:underline">
-                        {c.phone || "—"}
-                      </a>
-                      {c.distance_mi != null && (
-                        <div className="text-xs text-gray-400 mt-1">{c.distance_mi} mi away</div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <>
-                    {[
-                      { type: "👮 Police", name: "Ridgeway Precinct", phone: "(901) 545-5999" },
-                      { type: "🚒 Fire", name: "Fire Station #40", phone: "(901) 458-4700" },
-                      { type: "🏥 Hospital", name: "Methodist Le Bonheur", phone: "(901) 516-5200" },
-                    ].map((c) => (
-                      <div key={c.type} className="bg-white rounded-xl p-3 border border-green-200 shadow-sm">
-                        <div className="text-sm font-bold text-green-800 mb-1">{c.type}</div>
-                        <div className="text-sm text-gray-600 mb-2">{c.name}</div>
-                        <a href={`tel:${c.phone.replace(/\D/g, "")}`} className="text-base font-bold text-blue-600 hover:underline">
-                          {c.phone}
-                        </a>
-                      </div>
-                    ))}
-                  </>
-                )}
+            <div style={cardBody}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                {(data.contacts.length > 0 ? data.contacts.map((c) => ({
+                  label: c.type === "police" ? "👮 Police" : c.type === "fire" ? "🚒 Fire" : "🏥 Hospital",
+                  name: c.name, phone: c.phone,
+                  extra: c.distance_mi != null ? `${c.distance_mi} mi away` : ""
+                })) : [
+                  { label: "👮 Police", name: "Ridgeway Precinct", phone: "(901) 545-5999", extra: "" },
+                  { label: "🚒 Fire", name: "Fire Station #40", phone: "(901) 458-4700", extra: "" },
+                  { label: "🏥 Hospital", name: "Methodist Le Bonheur", phone: "(901) 516-5200", extra: "" },
+                ]).map((c) => (
+                  <div key={c.label} style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #bbf7d0" }}>
+                    <div style={{ fontWeight: 700, color: "#15803d", fontSize: 14, marginBottom: 4 }}>{c.label}</div>
+                    <div style={{ color: "#4b5563", fontSize: 13, marginBottom: 8 }}>{c.name}</div>
+                    <a href={`tel:${c.phone.replace(/\D/g, "")}`} style={{ color: "#1d4ed8", fontWeight: 700, fontSize: 15, textDecoration: "none" }}>{c.phone}</a>
+                    {c.extra && <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>{c.extra}</div>}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* ── SOS ALERT ── big bottom button */}
-          <div className="mt-8 rounded-xl border-2 border-red-400 bg-red-50 p-5 text-center">
-            <p className="text-base font-bold text-red-800 mb-4">
-              🆘 Need immediate help? Alert your Safe Circle or call 911.
-            </p>
-            <div className="flex gap-3 justify-center flex-wrap">
-              <button
-                onClick={handleSOS}
-                className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-lg shadow-lg"
-              >
-                📞 Call 911
-              </button>
-              <a
-                href="sms:?body=🚨 EMERGENCY: I need help immediately! Please call me or call 911."
-                className="px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-lg shadow-lg"
-              >
-                💬 SMS Alert
-              </a>
-            </div>
+          {/* SOS */}
+          <div style={{ marginTop: 32, borderRadius: 14, border: "2px solid #fca5a5", background: "#fef2f2", padding: 24, textAlign: "center" }}>
+            <p style={{ color: "#991b1b", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>🆘 Need immediate help? Alert your Safe Circle or call 911.</p>
+            <button onClick={handleSOS} style={{ padding: "12px 32px", background: "#dc2626", color: "#fff", fontWeight: 700, fontSize: 16, border: "none", borderRadius: 12, cursor: "pointer", marginRight: 12 }}>
+              📞 Call 911
+            </button>
+            <a href="sms:?body=🚨 EMERGENCY: I need help immediately! Please call me or call 911."
+              style={{ padding: "12px 32px", background: "#ea580c", color: "#fff", fontWeight: 700, fontSize: 16, border: "none", borderRadius: 12, textDecoration: "none" }}>
+              💬 SMS Alert
+            </a>
           </div>
         </>
       )}
 
-      {/* Initial state */}
       {!searchAddr && !loading && (
-        <div className="text-center py-20">
-          <div className="text-6xl mb-4">🛡️</div>
-          <p className="text-lg font-medium text-gray-700 mb-2">Enter an address above to get started</p>
-          <p className="text-base text-gray-500">SafeCircle checks warrants, crimes, sex offenders, and nearest emergency services for any address in Shelby County.</p>
+        <div style={{ textAlign: "center", padding: "80px 0" }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>🛡️</div>
+          <p style={{ fontSize: 18, fontWeight: 600, color: "#374151", marginBottom: 8 }}>Enter an address above to get started</p>
+          <p style={{ fontSize: 15, color: "#6b7280" }}>SafeCircle checks warrants, crimes, sex offenders, and nearest emergency services for any Shelby County address.</p>
         </div>
       )}
     </main>
