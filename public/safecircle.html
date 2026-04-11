@@ -1,0 +1,1098 @@
+I<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SafeCircle — Memphis Public Safety</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Rajdhani (display) + Source Sans 3 (body) -->
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --clr-bg:        #0b0f14;
+      --clr-panel:     #111720;
+      --clr-border:    #1e2a35;
+      --clr-accent:    #00c9a7;
+      --clr-amber:     #f59e0b;
+      --clr-rose:      #f43f5e;
+      --clr-blue:      #38bdf8;
+      --clr-text:      #cbd5e1;
+      --clr-muted:     #64748b;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Source Sans 3', sans-serif;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      min-height: 100vh;
+    }
+
+    h1, h2, h3, .label-cap {
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: .04em;
+    }
+
+    /* ── Header ────────────────────────────────────────────────── */
+    .site-header {
+      border-bottom: 1px solid var(--clr-border);
+      background: linear-gradient(135deg, #0d1721 0%, #0b1a13 100%);
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .site-header .logo-ring {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: 2px solid var(--clr-accent);
+      display: grid; place-items: center;
+      font-size: 1.35rem;
+    }
+    .site-header h1 { font-size: 1.6rem; font-weight: 700; color: #fff; }
+    .site-header .tagline { font-size: .78rem; color: var(--clr-muted); }
+
+    /* ── Layout ─────────────────────────────────────────────────── */
+    .app-shell {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* ── Address bar ─────────────────────────────────────────────── */
+    .addr-bar {
+      display: flex;
+      gap: .75rem;
+      flex-wrap: wrap;
+      align-items: center;
+      background: var(--clr-panel);
+      border: 1px solid var(--clr-border);
+      border-radius: 14px;
+      padding: 1rem 1.25rem;
+    }
+    .addr-bar input {
+      flex: 1;
+      min-width: 260px;
+      background: #0d131b;
+      border: 1px solid var(--clr-border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: .95rem;
+      padding: .55rem .9rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .addr-bar input:focus { border-color: var(--clr-accent); }
+    #geoPill {
+      font-size: .72rem;
+      color: var(--clr-accent);
+      background: #00c9a71a;
+      border: 1px solid #00c9a730;
+      border-radius: 20px;
+      padding: .2rem .75rem;
+      white-space: nowrap;
+    }
+    #visitGeoStatus { font-size: .78rem; color: var(--clr-muted); }
+
+    /* ── Button ─────────────────────────────────────────────────── */
+    .btn {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      font-size: .9rem;
+      letter-spacing: .06em;
+      border: none;
+      border-radius: 9px;
+      cursor: pointer;
+      padding: .55rem 1.1rem;
+      transition: filter .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:hover  { filter: brightness(1.12); }
+    .btn-accent  { background: var(--clr-accent);  color: #0b1a14; }
+    .btn-amber   { background: var(--clr-amber);   color: #1a0e00; }
+    .btn-blue    { background: var(--clr-blue);    color: #031420; }
+    .btn-rose    { background: var(--clr-rose);    color: #1a0009; }
+    .btn-ghost   { background: transparent; border: 1px solid var(--clr-border); color: var(--clr-text); }
+
+    /* ── Cards grid ──────────────────────────────────────────────── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      background: var(--clr-panel);
+      border: 1px solid var(--clr-border);
+      border-radius: 16px;
+      padding: 1.1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: .65rem;
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+    }
+    .card-icon {
+      font-size: 1.25rem;
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: grid; place-items: center;
+      flex-shrink: 0;
+    }
+    .card-head h3 { font-size: 1rem; font-weight: 700; color: #e2e8f0; }
+    .card-body { font-size: .8rem; color: var(--clr-muted); line-height: 1.5; }
+
+    /* ── Accordion (crime data) ──────────────────────────────────── */
+    #crimeAccordionDynamic { margin-top: .25rem; }
+    #crimeAccordionToggleDynamic {
+      width: 100%;
+      text-align: left;
+      background: #111a24;
+      border: 1px solid var(--clr-border);
+      border-radius: 10px;
+      color: var(--clr-text);
+      font-size: .8rem;
+      padding: .55rem .9rem;
+      cursor: pointer;
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: .04em;
+      transition: background .15s;
+    }
+    #crimeAccordionToggleDynamic:hover { background: #192130; }
+    #crimeAccordionBodyDynamic {
+      margin-top: .5rem;
+      border: 1px solid #92400e55;
+      border-radius: 14px;
+      background: #1c130033;
+      padding: .9rem;
+      font-size: .82rem;
+      color: var(--clr-text);
+    }
+
+    /* ── Incident table ──────────────────────────────────────────── */
+    .incident-table { width: 100%; border-collapse: collapse; min-width: 600px; }
+    .incident-table th {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: .78rem;
+      color: var(--clr-muted);
+      text-align: left;
+      padding: .4rem .6rem;
+      border-bottom: 1px solid var(--clr-border);
+    }
+    .incident-table td {
+      font-size: .78rem;
+      padding: .45rem .6rem;
+      border-bottom: 1px solid #1e2a3540;
+      vertical-align: top;
+    }
+    .badge {
+      display: inline-block;
+      font-size: .7rem;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      padding: .1rem .5rem;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+    .badge-red    { background:#f43f5e22; color:#f87171; border:1px solid #f43f5e44; }
+    .badge-amber  { background:#f59e0b22; color:#fbbf24; border:1px solid #f59e0b44; }
+    .badge-blue   { background:#38bdf822; color:#7dd3fc; border:1px solid #38bdf844; }
+    .badge-green  { background:#22c55e22; color:#86efac; border:1px solid #22c55e44; }
+    .badge-purple { background:#a855f722; color:#d8b4fe; border:1px solid #a855f744; }
+    .badge-gray   { background:#64748b22; color:#94a3b8; border:1px solid #64748b44; }
+
+    /* ── Map modal ───────────────────────────────────────────────── */
+    #psBackdrop {
+      position: fixed; inset: 0;
+      background: #000000cc;
+      z-index: 9000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    #psBackdrop.open { display: flex; }
+    #psMapModal {
+      width: 100%;
+      max-width: 860px;
+      background: var(--clr-panel);
+      border: 1px solid var(--clr-border);
+      border-radius: 18px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #psMapHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .75rem 1rem;
+      border-bottom: 1px solid var(--clr-border);
+    }
+    #psMapTitle { font-family:'Rajdhani',sans-serif; font-size:1rem; font-weight:700; color:#fff; }
+    #psMapMeta  { font-size:.72rem; color:var(--clr-muted); }
+    #psMap { height: 420px; width: 100%; }
+
+    /* ── Contacts section ────────────────────────────────────────── */
+    #contactsSection { display: none; }
+    .contacts-table { width: 100%; border-collapse: collapse; }
+    .contacts-table th {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: .78rem;
+      color: var(--clr-muted);
+      text-align: left;
+      padding: .4rem .6rem;
+      border-bottom: 1px solid var(--clr-border);
+    }
+    .contacts-table td {
+      font-size: .82rem;
+      padding: .45rem .6rem;
+      border-bottom: 1px solid #1e2a3540;
+    }
+    .contacts-table tr:hover td { background: #ffffff05; }
+
+    /* ── Alert banner ────────────────────────────────────────────── */
+    #alertBanner {
+      display: none;
+      background: linear-gradient(90deg,#7f1d1d,#991b1b);
+      border: 1px solid #f43f5e88;
+      border-radius: 12px;
+      padding: .85rem 1.1rem;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fecaca;
+      letter-spacing: .06em;
+      text-align: center;
+    }
+
+    /* ── Divider label ───────────────────────────────────────────── */
+    .section-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .14em;
+      color: var(--clr-muted);
+      text-transform: uppercase;
+      padding-bottom: .3rem;
+      border-bottom: 1px solid var(--clr-border);
+    }
+
+    /* staging (hidden) */
+    #publicSafetyContent { display: none; }
+
+    /* sub-status line */
+    #publicSafetySub { font-size: .75rem; color: var(--clr-muted); }
+
+    /* iframe */
+    .sc-iframe {
+      width: 100%;
+      height: 340px;
+      border: none;
+      border-radius: 10px;
+      background: #000;
+    }
+
+    /* responsive */
+    @media (max-width: 600px) {
+      .cards-grid { grid-template-columns: 1fr; }
+      #psMap { height: 300px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<header class="site-header">
+  <div class="logo-ring">🛡️</div>
+  <div>
+    <h1>SafeCircle</h1>
+    <div class="tagline">Memphis / Shelby County Public Safety Intelligence</div>
+  </div>
+</header>
+
+<!-- hidden staging div for incident data -->
+<div id="publicSafetyContent" aria-hidden="true"></div>
+
+<!-- ═══════════════ APP SHELL ═══════════════ -->
+<main class="app-shell">
+
+  <!-- ── Unified Address Panel ── -->
+  <div class="addr-bar" style="flex-direction:column;gap:.85rem;">
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;width:100%;">
+      <div style="display:flex;flex-direction:column;gap:.2rem;flex:0 0 100px;">
+        <label style="font-size:.68rem;color:var(--clr-muted);font-family:'Rajdhani',sans-serif;letter-spacing:.08em;text-transform:uppercase;">Street #</label>
+        <input id="wStreetNum" type="text" placeholder="4128" value="4128"
+          style="background:#0d131b;border:1px solid var(--clr-border);border-radius:8px;color:#fff;font-size:1.05rem;padding:.52rem .8rem;outline:none;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:.04em;transition:border-color .2s;width:100%;" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.2rem;flex:1;min-width:160px;">
+        <label style="font-size:.68rem;color:var(--clr-muted);font-family:'Rajdhani',sans-serif;letter-spacing:.08em;text-transform:uppercase;">Street Name</label>
+        <input id="wStreetName" type="text" placeholder="Weymouth" value="Weymouth"
+          style="background:#0d131b;border:1px solid var(--clr-border);border-radius:8px;color:#fff;font-size:1.05rem;padding:.52rem .8rem;outline:none;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:.04em;transition:border-color .2s;width:100%;" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.2rem;flex:1;min-width:140px;">
+        <label style="font-size:.68rem;color:var(--clr-muted);font-family:'Rajdhani',sans-serif;letter-spacing:.08em;text-transform:uppercase;">City, State</label>
+        <input id="wCityState" type="text" placeholder="Memphis TN" value="Memphis TN"
+          style="background:#0d131b;border:1px solid var(--clr-border);border-radius:8px;color:#fff;font-size:1.05rem;padding:.52rem .8rem;outline:none;font-family:'Rajdhani',sans-serif;font-weight:600;transition:border-color .2s;width:100%;" />
+      </div>
+    </div>
+    <div style="display:flex;gap:.65rem;flex-wrap:wrap;align-items:center;width:100%;">
+      <button class="btn btn-accent" id="btnRunAll" style="font-size:1rem;padding:.6rem 1.4rem;letter-spacing:.08em;">
+        &#x1F6E1; Run All Safety Checks
+      </button>
+      <span id="geoPill">lat=?, lon=?</span>
+      <div id="visitGeoStatus" style="font-size:.78rem;color:var(--clr-muted);">Enter an address and press Run All Safety Checks.</div>
+    </div>
+    <!-- hidden full address for geocode & NSOPW -->
+    <input id="visitAddress" type="hidden" value="4128 Weymouth Cove, Memphis TN" />
+  </div>
+
+  <!-- ── Alert Banner ── -->
+  <div id="alertBanner">🚨 EMERGENCY ALERT SENT TO YOUR SAFE CIRCLE 🚨</div>
+
+  <!-- ── SECTION 1: Safety Check Results ── -->
+  <div class="section-label">Safety Check Results</div>
+
+  <!-- Results row — three status cards side by side -->
+  <div class="cards-grid" id="checkResultsGrid">
+
+    <!-- Warrant result -->
+    <div class="card" id="cardWarrant">
+      <div class="card-head">
+        <div class="card-icon" style="background:#f59e0b1a; color:#f59e0b;">&#x2696;&#xFE0F;</div>
+        <h3>Warrant Check</h3>
+      </div>
+      <div id="warrantResult" style="font-size:.82rem;color:var(--clr-muted);">Run checks to see warrant results.</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.25rem;">
+        <button class="btn btn-amber" id="btnWarrantAddr" style="font-size:.82rem;">Open Results &#x2197;</button>
+        <!-- Name search toggle -->
+        <button class="btn btn-ghost" id="btnWarrantName" style="font-size:.78rem;">&#x1F464; By Name</button>
+      </div>
+      <div id="warrantNameForm" style="display:none;flex-direction:column;gap:.4rem;background:#0d131b;border:1px solid var(--clr-border);border-radius:9px;padding:.7rem;margin-top:.25rem;">
+        <div style="display:flex;gap:.4rem;">
+          <input id="wLastName"  type="text" placeholder="Last Name"  style="flex:1;background:#0b1117;border:1px solid var(--clr-border);border-radius:7px;color:#fff;font-size:.9rem;padding:.4rem .65rem;outline:none;font-family:'Rajdhani',sans-serif;" />
+          <input id="wFirstName" type="text" placeholder="First Name" style="flex:1;background:#0b1117;border:1px solid var(--clr-border);border-radius:7px;color:#fff;font-size:.9rem;padding:.4rem .65rem;outline:none;font-family:'Rajdhani',sans-serif;" />
+        </div>
+        <div style="display:flex;gap:.4rem;">
+          <button class="btn btn-amber" id="btnWarrantNameGo" style="font-size:.82rem;">Search</button>
+          <button class="btn btn-ghost"  id="btnWarrantNameCancel" style="font-size:.82rem;">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sex offender result -->
+    <div class="card" id="cardSOR">
+      <div class="card-head">
+        <div class="card-icon" style="background:#a855f71a; color:#a855f7;">&#x1F50D;</div>
+        <h3>Sex Offender Registry</h3>
+      </div>
+      <div id="sorResult" style="font-size:.82rem;color:var(--clr-muted);">Run checks to search NSOPW.</div>
+      <button class="btn btn-ghost" id="btnNSOR" style="border-color:#a855f755;color:#d8b4fe;font-size:.82rem;margin-top:.25rem;">Open NSOPW &#x2197;</button>
+    </div>
+
+    <!-- Incidents result -->
+    <div class="card" id="cardIncidents" style="grid-column:1/-1;">
+      <div class="card-head">
+        <div class="card-icon" style="background:#f43f5e1a; color:#f43f5e;">&#x1F694;</div>
+        <h3>Reported Incidents — ½ mile · 14 days</h3>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <div id="publicSafetySub" style="font-size:.82rem;color:var(--clr-muted);flex:1;">Run checks to load incidents.</div>
+        <button class="btn btn-ghost" id="btnPublicSafetyMap" style="font-size:.82rem;">&#x1F5FA; Show Map</button>
+        <button class="btn btn-rose"  id="btnPublicSafety"    style="font-size:.82rem;display:none;">Reload</button>
+      </div>
+      <div id="crimeAccordionDynamic"></div>
+    </div>
+
+    <!-- Jail Roster -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon" style="background:#38bdf81a; color:#38bdf8;">&#x1F3DB;&#xFE0F;</div>
+        <h3>Jail Roster</h3>
+      </div>
+      <div class="card-body">View who is currently in the Shelby County jail.</div>
+      <a class="btn btn-blue" href="https://imljail.shelbycountytn.gov/IML" target="_blank" rel="noopener">View Jail Roster &#x2197;</a>
+    </div>
+
+  </div><!-- /checkResultsGrid -->
+
+  <!-- ── SECTION 2: Nearby Services ── -->
+  <div class="section-label">Nearest Services</div>
+  <div class="cards-grid" id="nearbyServices">
+    <div class="card" id="cardPolice">
+      <div class="card-head">
+        <div class="card-icon" style="background:#38bdf81a; color:#38bdf8;">🚓</div>
+        <h3>Police Station</h3>
+      </div>
+      <div class="card-body" id="policeInfo">Geocode an address to find the nearest precinct.</div>
+    </div>
+    <div class="card" id="cardFire">
+      <div class="card-head">
+        <div class="card-icon" style="background:#f59e0b1a; color:#f59e0b;">🚒</div>
+        <h3>Fire Station</h3>
+      </div>
+      <div class="card-body" id="fireInfo">Geocode an address to find the nearest fire station.</div>
+    </div>
+    <div class="card" id="cardHospital">
+      <div class="card-head">
+        <div class="card-icon" style="background:#22c55e1a; color:#22c55e;">🏥</div>
+        <h3>Hospital</h3>
+      </div>
+      <div class="card-body" id="hospitalInfo">Geocode an address to find the nearest hospital.</div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: Safe Circle Contacts ── -->
+  <div class="section-label">Safe Circle Contacts</div>
+  <div class="card">
+    <div class="card-head">
+      <div class="card-icon" style="background:#00c9a71a; color:#00c9a7;">👥</div>
+      <h3>My Safe Circle</h3>
+    </div>
+    <div class="card-body">Add trusted contacts. In an emergency, notify them all instantly.</div>
+
+    <!-- Import CSV -->
+    <div style="display:flex; gap:.6rem; flex-wrap:wrap; align-items:center;">
+      <label class="btn btn-ghost" style="cursor:pointer;">
+        📂 Import CSV
+        <input type="file" id="csvImport" accept=".csv" style="display:none;" />
+      </label>
+      <button class="btn btn-accent" id="btnAddContact">+ Add Contact</button>
+      <button class="btn btn-rose" id="btnAlertAll">🚨 Alert All</button>
+    </div>
+
+    <!-- Add contact form (hidden until button clicked) -->
+    <div id="addContactForm" style="display:none; background:#0d131b; border:1px solid var(--clr-border); border-radius:10px; padding:.85rem; display:none; flex-direction:column; gap:.5rem;">
+      <input id="newName"  class="addr-bar input" type="text"  placeholder="Full Name"     style="background:#0d131b;border:1px solid var(--clr-border);border-radius:8px;color:#fff;font-size:.9rem;padding:.45rem .8rem;outline:none;width:100%;" />
+      <input id="newEmail" class="addr-bar input" type="email" placeholder="Email"         style="background:#0d131b;border:1px solid var(--clr-border);border-radius:8px;color:#fff;font-size:.9rem;padding:.45rem .8rem;outline:none;width:100%;" />
+      <input id="newPhone" class="addr-bar input" type="tel"   placeholder="Phone Number"  style="background:#0d131b;border:1px solid var(--clr-border);border-radius:8px;color:#fff;font-size:.9rem;padding:.45rem .8rem;outline:none;width:100%;" />
+      <div style="display:flex;gap:.5rem;">
+        <button class="btn btn-accent" id="btnSaveContact">Save</button>
+        <button class="btn btn-ghost"  id="btnCancelContact">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Contacts table -->
+    <div id="contactsSection" style="overflow-x:auto;">
+      <table class="contacts-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="contactsBody"></tbody>
+      </table>
+    </div>
+    <div id="noContacts" style="font-size:.8rem; color:var(--clr-muted);">No contacts yet. Add or import your safe circle.</div>
+  </div>
+
+</main><!-- /app-shell -->
+
+<!-- ═══════════════ MAP MODAL ═══════════════ -->
+<div id="psBackdrop">
+  <div id="psMapModal">
+    <div id="psMapHeader">
+      <div>
+        <div id="psMapTitle">Public Safety Map</div>
+        <div id="psMapMeta"></div>
+      </div>
+      <button class="btn btn-ghost" id="btnCloseMap" style="padding:.35rem .8rem;">✕ Close</button>
+    </div>
+    <div id="psMap"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ SCRIPTS ═══════════════ -->
+<script>
+  // ─── Constants ───────────────────────────────────────────────
+  const GEOCODE_URL = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
+  const MPD_QUERY_URL = "https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0/query";
+  const WARRANT_URL   = "https://warrants.shelby-sheriff.org/w_warrant_result.php";
+
+  const PS = {
+    radiusMiles: 0.5,
+    windowDays:  14,
+    lat: null, lon: null,
+    matched: null,
+    incidents: [],
+  };
+
+  // ─── Helpers ─────────────────────────────────────────────────
+  function psMeters(mi){ return mi * 1609.344; }
+  function psEsc(s){ return (s ?? "").toString().replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c])); }
+  function psFmtDate(ms){ return ms ? new Date(ms).toLocaleString() : ""; }
+
+  function setGeoPill(){
+    const el = document.getElementById("geoPill");
+    if(!el) return;
+    el.textContent = (typeof PS.lat==="number" && typeof PS.lon==="number")
+      ? `lat=${PS.lat.toFixed(6)}, lon=${PS.lon.toFixed(6)}`
+      : "lat=?, lon=?";
+  }
+  function setSub(msg){ const el=document.getElementById("publicSafetySub"); if(el) el.textContent=msg; }
+  function setGeoStatus(msg){ const el=document.getElementById("visitGeoStatus"); if(el) el.textContent=msg; }
+
+  // ─── UCR colour coding ────────────────────────────────────────
+  const UCR_COLOR = {
+    "VIOLENT CRIME": "badge-red",
+    "HOMICIDE":      "badge-red",
+    "RAPE":          "badge-red",
+    "ROBBERY":       "badge-red",
+    "ASSAULT":       "badge-red",
+    "AGGRAVATED ASSAULT": "badge-red",
+    "BURGLARY":      "badge-amber",
+    "THEFT":         "badge-amber",
+    "MOTOR VEHICLE THEFT": "badge-amber",
+    "ARSON":         "badge-rose",
+    "DRUGS":         "badge-purple",
+    "NARCOTICS":     "badge-purple",
+    "DUI":           "badge-purple",
+    "VANDALISM":     "badge-blue",
+    "DISTURBANCE":   "badge-blue",
+    "FRAUD":         "badge-blue",
+  };
+  function ucrBadge(cat){
+    const key = (cat||"").toUpperCase();
+    let cls = "badge-gray";
+    for(const [k,v] of Object.entries(UCR_COLOR)){
+      if(key.includes(k)){ cls=v; break; }
+    }
+    return `<span class="badge ${cls}">${psEsc(cat||"OTHER")}</span>`;
+  }
+
+  // Map marker colour by UCR
+  const MARKER_COLOR = {
+    "badge-red":    "#f43f5e",
+    "badge-amber":  "#f59e0b",
+    "badge-purple": "#a855f7",
+    "badge-blue":   "#38bdf8",
+    "badge-gray":   "#64748b",
+  };
+  function ucrEmoji(cat){
+    const k = (cat||"").toUpperCase();
+    if(k.includes("HOMICIDE"))           return "💀";
+    if(k.includes("RAPE")   || k.includes("SEXUAL")) return "🚨";
+    if(k.includes("ROBBERY"))            return "💰";
+    if(k.includes("AGGRAVATED ASSAULT")) return "🔪";
+    if(k.includes("ASSAULT"))            return "👊";
+    if(k.includes("BURGLARY") || k.includes("BURG")) return "🏚";
+    if(k.includes("THEFT") || k.includes("LARCENY")) return "🛍";
+    if(k.includes("MOTOR VEHICLE") || k.includes("AUTO")) return "🚗";
+    if(k.includes("ARSON"))              return "🔥";
+    if(k.includes("DRUG") || k.includes("NARCOTIC")) return "💊";
+    if(k.includes("WEAPON"))             return "🔫";
+    if(k.includes("VANDAL") || k.includes("DEST"))   return "🪓";
+    if(k.includes("DUI")    || k.includes("DWI"))    return "🍺";
+    if(k.includes("DISTURBANCE"))        return "📢";
+    if(k.includes("FRAUD"))              return "📋";
+    return "📍";
+  }
+
+  function ucrMarkerColor(cat){
+    const key = (cat||"").toUpperCase();
+    let cls = "badge-gray";
+    for(const [k,v] of Object.entries(UCR_COLOR)){
+      if(key.includes(k)){ cls=v; break; }
+    }
+    return MARKER_COLOR[cls] || "#64748b";
+  }
+
+  // ─── Geocode ──────────────────────────────────────────────────
+  async function geocodeVisit(force=false){
+    const input = document.getElementById("visitAddress");
+    if(!input) return null;
+    const addr = input.value.trim();
+    if(!addr){ setGeoStatus("Enter an address."); PS.lat=PS.lon=null; PS.matched=null; setGeoPill(); return null; }
+    setGeoStatus("Geocoding…");
+    try {
+      const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(addr)}&maxLocations=1&outFields=*&f=pjson`;
+      const r = await fetch(url);
+      const j = await r.json();
+      if(!j.candidates || !j.candidates.length){
+        setGeoStatus("No match found."); PS.lat=PS.lon=null; PS.matched=null; setGeoPill(); return null;
+      }
+      const best = j.candidates[0];
+      PS.lat = best.location.y; PS.lon = best.location.x; PS.matched = best.address;
+      setGeoStatus(`Mapped: ${best.address} (score ${best.score})`);
+      setGeoPill();
+      findNearby(PS.lat, PS.lon);
+      return { lat: PS.lat, lon: PS.lon };
+    } catch(e) {
+      setGeoStatus("Geocode error: " + e.message);
+      return null;
+    }
+  }
+
+  // ─── Render incidents ─────────────────────────────────────────
+  // Writes directly to the visible accordion body (or staging div as fallback)
+  function getIncidentHost(){
+    return document.getElementById("crimeAccordionBodyDynamic")
+        || document.getElementById("publicSafetyContent");
+  }
+  function renderIncidents(list){
+    const host = getIncidentHost();
+    if(!host) return;
+    if(!list || !list.length){
+      host.innerHTML = '<div style="font-size:.8rem;color:#6ee7b7;">No incidents in this radius/window.</div>';
+      return;
+    }
+    const rows = list.slice(0,40).map(f=>{
+      const a = f.attributes || {};
+      return `<tr>
+        <td style="color:#94a3b8;white-space:nowrap;">${psEsc(psFmtDate(a.Offense_Datetime))}</td>
+        <td>${ucrBadge(a.UCR_Category)}</td>
+        <td style="color:#cbd5e1;">${psEsc(a.UCR_Description||"")}</td>
+        <td style="color:#94a3b8;">${psEsc(a.Street_Address||"")}</td>
+      </tr>`;
+    }).join("");
+    host.innerHTML = `
+      <div style="font-size:.75rem;color:#64748b;margin-bottom:.5rem;">Showing top ${Math.min(40,list.length)} of ${list.length} incidents</div>
+      <div style="overflow-x:auto;border-radius:10px;border:1px solid #1e2a35;">
+        <table class="incident-table">
+          <thead><tr><th>When</th><th>Category</th><th>Description</th><th>Address</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // ─── Load public safety ───────────────────────────────────────
+  async function loadPublicSafety(){
+    setSub("Loading incidents…");
+    const geo = await geocodeVisit(false);
+    if(!geo){ setSub("Address not mapped."); return; }
+
+    const end   = Date.now();
+    const start = end - (PS.windowDays * 86400000);
+
+    const params = new URLSearchParams({
+      where: "1=1",
+      geometry: `${PS.lon},${PS.lat}`,
+      geometryType: "esriGeometryPoint",
+      inSR: "4326",
+      distance: String(psMeters(PS.radiusMiles)),
+      units: "esriSRUnit_Meter",
+      outFields: "Offense_Datetime,UCR_Category,UCR_Description,Street_Address,Latitude,Longitude,Precinct,Ward,Crime_ID",
+      orderByFields: "Offense_Datetime DESC",
+      resultRecordCount: "200",
+      returnGeometry: "true",
+      time: `${start},${end}`,
+      f: "json"
+    });
+
+    const url = `${MPD_QUERY_URL}?${params}`;
+
+    const host = getIncidentHost();
+    if(host) host.innerHTML = '<div style="font-size:.78rem;color:#64748b;">Querying MPD…</div>';
+
+    try {
+      const r = await fetch(url);
+      const j = await r.json();
+      if(j.error){
+        const msg = (j.error.details||[]).join(" ") || j.error.message || "Unknown error";
+        setSub("Query error.");
+        if(host) host.innerHTML = `<div style="color:#f87171;font-size:.82rem;">MPD error: ${psEsc(msg)}</div>`;
+        return;
+      }
+      PS.incidents = j.features || [];
+      setSub(`${PS.incidents.length} incident${PS.incidents.length!==1?"s":""} found.`);
+      renderIncidents(PS.incidents);
+    } catch(e) {
+      setSub("Fetch error.");
+      if(host) host.innerHTML = `<div style="color:#f87171;font-size:.82rem;">Fetch error: ${psEsc(e.message)}</div>`;
+    }
+  }
+
+  // ─── Accordion ────────────────────────────────────────────────
+  function wireAccordion(){
+    const btnPS = document.getElementById("btnPublicSafety");
+    const staging = document.getElementById("publicSafetyContent");
+    const acc  = document.getElementById("crimeAccordionDynamic");
+    if(!btnPS || !acc) return;
+
+    // Build inner elements once
+    const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.id   = "crimeAccordionToggleDynamic";
+    toggleBtn.textContent = "Public Safety Data";
+    toggleBtn.setAttribute("aria-expanded","false");
+
+    const body = document.createElement("div");
+    body.id = "crimeAccordionBodyDynamic";
+    body.style.display = "none";
+
+    acc.appendChild(toggleBtn);
+    acc.appendChild(body);
+
+    toggleBtn.addEventListener("click", ()=>{
+      const isOpen = body.style.display !== "none";
+      body.style.display = isOpen ? "none" : "block";
+      toggleBtn.textContent = isOpen ? "Public Safety Data" : "Close Public Safety";
+      toggleBtn.setAttribute("aria-expanded", isOpen ? "false" : "true");
+      if(!isOpen) body.scrollIntoView({ behavior:"smooth", block:"start" });
+    });
+
+    btnPS.addEventListener("click", async ()=>{
+      // Make sure accordion body exists and is open before loading
+      body.style.display = "block";
+      toggleBtn.textContent = "Close Public Safety";
+      toggleBtn.setAttribute("aria-expanded","true");
+      body.innerHTML = '<div style="font-size:.78rem;color:#64748b;">Loading…</div>';
+      // loadPublicSafety now renders directly into crimeAccordionBodyDynamic
+      await loadPublicSafety();
+      body.scrollIntoView({ behavior:"smooth", block:"start" });
+    });
+  }
+
+  // ─── Map ──────────────────────────────────────────────────────
+  let psMap, psLayer, psCircle;
+
+  function ensureMap(){
+    if(psMap) return;
+    psMap   = L.map("psMap").setView([35.1495,-90.0490], 14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+      maxZoom:19, attribution:"© OpenStreetMap contributors"
+    }).addTo(psMap);
+    psLayer = L.layerGroup().addTo(psMap);
+  }
+
+  function openMapModal(){
+    const bd = document.getElementById("psBackdrop");
+    if(bd){ bd.classList.add("open"); }
+    setTimeout(()=> psMap && psMap.invalidateSize(), 80);
+  }
+  function closeMapModal(){
+    const bd = document.getElementById("psBackdrop");
+    if(bd){ bd.classList.remove("open"); }
+  }
+
+  async function showPublicSafetyMap(){
+    if(!PS.incidents || !PS.incidents.length) await loadPublicSafety();
+    if(typeof PS.lat !== "number"){ setSub("Map needs a valid geocode."); return; }
+
+    ensureMap();
+    psLayer.clearLayers();
+    if(psCircle){ psCircle.remove(); psCircle=null; }
+
+    const center = L.latLng(PS.lat, PS.lon);
+    psMap.setView(center, 14);
+
+    L.circleMarker(center,{radius:9,color:"#00c9a7",fillColor:"#00c9a7",fillOpacity:.9})
+      .addTo(psLayer).bindPopup(`<b>Visit</b><br/>${psEsc(PS.matched||"")}`);
+
+    psCircle = L.circle(center,{
+      radius: psMeters(PS.radiusMiles),
+      color:"#00c9a7", weight:1.5, fillColor:"#00c9a7", fillOpacity:.04
+    }).addTo(psLayer);
+
+    let bounds = L.latLngBounds([center]);
+    for(const f of PS.incidents){
+      const a = f.attributes||{};
+      const lat=a.Latitude, lon=a.Longitude;
+      if(typeof lat!=="number" || typeof lon!=="number") continue;
+      const p = L.latLng(lat,lon);
+      bounds.extend(p);
+      const color = ucrMarkerColor(a.UCR_Category);
+      const popup = `<div style="font-size:12px;max-width:220px;">
+        <b>${psEsc(a.UCR_Category||"")}</b><br/>
+        ${psEsc(a.UCR_Description||"")}<br/>
+        ${psEsc(a.Street_Address||"")}<br/>
+        <span style="opacity:.7">${psEsc(psFmtDate(a.Offense_Datetime))}</span>
+      </div>`;
+      const svgIcon = L.divIcon({
+        className: "",
+        html: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="34" viewBox="0 0 28 34">
+          <path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 20 14 20s14-10.67 14-20C28 6.27 21.73 0 14 0z" fill="${color}" stroke="#000" stroke-width="1.2" stroke-opacity=".4"/>
+          <text x="14" y="18" text-anchor="middle" font-size="13" font-family="sans-serif">${ucrEmoji(a.UCR_Category)}</text>
+        </svg>`,
+        iconSize: [28, 34],
+        iconAnchor: [14, 34],
+        popupAnchor: [0, -34]
+      });
+      L.marker(p, { icon: svgIcon }).addTo(psLayer).bindPopup(popup);
+    }
+
+    psMap.fitBounds(bounds.pad(.18),{maxZoom:17});
+    if(psMap.getZoom()<14) psMap.setZoom(14);
+
+    const t=document.getElementById("psMapTitle");
+    if(t) t.textContent="Public Safety Map — Visit Area";
+    const m=document.getElementById("psMapMeta");
+    if(m) m.textContent=`Radius: ${PS.radiusMiles} mi · Incidents: ${PS.incidents.length}`;
+
+    openMapModal();
+  }
+
+  // ─── Nearby services (Google Places via Overpass fallback) ────
+  async function findNearby(lat, lon){
+    const types = [
+      { id:"policeInfo",  query:"police",   label:"Police Station" },
+      { id:"fireInfo",    query:"fire_station", label:"Fire Station" },
+      { id:"hospitalInfo",query:"hospital", label:"Hospital"       },
+    ];
+    for(const t of types){
+      const el = document.getElementById(t.id);
+      if(el) el.innerHTML = '<span style="color:#64748b;font-size:.8rem;">Searching…</span>';
+    }
+    // Use Overpass (OSM) to find nearest — free, no key needed
+    const r = PS.radiusMiles * 1609.344 * 4; // 2 mile search
+    for(const t of types){
+      try {
+        const el = document.getElementById(t.id);
+        const q = `[out:json];node["amenity"="${t.query}"](around:${Math.round(r)},${lat},${lon});out 1;`;
+        const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`);
+        const js  = await res.json();
+        const node = js.elements && js.elements[0];
+        if(!node){
+          if(el) el.innerHTML = `<span style="color:#64748b;font-size:.8rem;">None found nearby.</span>`;
+          continue;
+        }
+        const name  = node.tags?.name  || t.label;
+        const phone = node.tags?.phone || node.tags?.["contact:phone"] || "";
+        const addr  = [node.tags?.["addr:housenumber"], node.tags?.["addr:street"]].filter(Boolean).join(" ");
+        if(el) el.innerHTML = `
+          <div style="font-size:.85rem;font-weight:600;color:#e2e8f0;">${psEsc(name)}</div>
+          ${addr ? `<div style="font-size:.78rem;color:#64748b;">${psEsc(addr)}</div>` : ""}
+          ${phone ? `<a href="tel:${psEsc(phone)}" style="font-size:.82rem;color:#00c9a7;">${psEsc(phone)}</a>` : ""}`;
+      } catch(e) {
+        const el = document.getElementById(t.id);
+        if(el) el.innerHTML = `<span style="color:#f87171;font-size:.78rem;">Lookup failed.</span>`;
+      }
+    }
+  }
+
+  // ─── Warrant links ────────────────────────────────────────────
+  // Street type suffixes to strip — Sheriff's search wants only the base street name
+  const STREET_SUFFIXES = /\b(st|ave|blvd|dr|rd|ln|ct|cir|pl|way|pkwy|hwy|trl|ter|trce|cv|cove|run|loop|pass|path|row|sq|walk|xing|ext|fwy|expy|aly|bnd|brg|holw|knl|mdws|mews|mt|pike|pt|spur|vw|vis|vlg|via|tunl|trfy|crk|byp|cor|cors|crst|curv|dvd|est|fk|fks|fld|flds|frk|frks|frt|gln|grn|grv|gtwy|hvn|hts|inlt|is|iss|jct|jcts|lk|lks|mdw|ml|mls|msn|mtwy|nck|orch|oval|park|pne|pnes|prt|prts|radl|rnch|rpd|rpds|rst|rte|shls|shl|shr|shrs|skwy|spg|spgs|smt|sta|strm|upas|un|uns|vly|vlys|vis|vst|wl|wls)\b/gi;
+
+  // Auto-fill warrant address fields from main address input
+  function fillWarrantFields(){
+    const addr = document.getElementById("visitAddress").value.trim();
+    const streetOnly = addr.replace(/,.*$/,"").trim();
+    const parts = streetOnly.split(/\s+/);
+    const num = parts[0] || "";
+    const rawStreet = parts.slice(1).join(" ");
+    const name = rawStreet.replace(STREET_SUFFIXES,"").trim().split(/\s+/)[0] || rawStreet.split(/\s+/)[0] || "";
+    const numEl  = document.getElementById("wStreetNum");
+    const nameEl = document.getElementById("wStreetName");
+    if(numEl  && !numEl.value)  numEl.value  = num;
+    if(nameEl && !nameEl.value) nameEl.value = name;
+  }
+
+  function wireWarrants(){
+    document.getElementById("btnWarrantAddr").addEventListener("click", ()=>{
+      const s  = (document.getElementById("wStreetNum").value  || "").trim();
+      const st = (document.getElementById("wStreetName").value || "").trim();
+      if(!s && !st){ alert("Enter a street number or name."); return; }
+      const url = WARRANT_URL + "?w=&l=&f=&s=" + encodeURIComponent(s) + "&st=" + encodeURIComponent(st);
+      window.open(url,"_blank");
+    });
+    document.getElementById("btnWarrantName").addEventListener("click", ()=>{
+      const f = document.getElementById("warrantNameForm");
+      f.style.display = f.style.display === "none" ? "flex" : "none";
+    });
+    document.getElementById("btnWarrantNameCancel").addEventListener("click", ()=>{
+      document.getElementById("warrantNameForm").style.display = "none";
+    });
+    document.getElementById("btnWarrantNameGo").addEventListener("click", ()=>{
+      const last  = document.getElementById("wLastName").value.trim();
+      const first = document.getElementById("wFirstName").value.trim();
+      if(!last){ alert("Enter a last name."); return; }
+      const url = `${WARRANT_URL}?w=&l=${encodeURIComponent(last)}&f=${encodeURIComponent(first)}&s=&st=`;
+      window.open(url,"_blank");
+    });
+    document.getElementById("btnNSOR").addEventListener("click", ()=>{
+      buildAddress();
+      const addr = encodeURIComponent(document.getElementById("visitAddress").value.trim());
+      window.open("https://www.nsopw.gov/Search/Results?street=" + addr + "&city=Memphis&state=TN","_blank");
+    });
+  }
+
+  // ─── Contacts ─────────────────────────────────────────────────
+  let contacts = JSON.parse(localStorage.getItem("sc_contacts")||"[]");
+
+  function saveContacts(){ localStorage.setItem("sc_contacts", JSON.stringify(contacts)); }
+
+  function renderContacts(){
+    const tbody = document.getElementById("contactsBody");
+    const none  = document.getElementById("noContacts");
+    const sect  = document.getElementById("contactsSection");
+    if(!contacts.length){
+      if(sect) sect.style.display="none";
+      if(none) none.style.display="block";
+      return;
+    }
+    if(sect) sect.style.display="block";
+    if(none) none.style.display="none";
+    tbody.innerHTML = contacts.map((c,i)=>`
+      <tr>
+        <td style="color:#e2e8f0;">${psEsc(c.name)}</td>
+        <td><a href="mailto:${psEsc(c.email)}" style="color:#00c9a7;">${psEsc(c.email)}</a></td>
+        <td><a href="tel:${psEsc(c.phone)}"  style="color:#00c9a7;">${psEsc(c.phone)}</a></td>
+        <td>
+          <button class="btn btn-ghost" style="padding:.2rem .6rem;font-size:.72rem;" onclick="removeContact(${i})">✕</button>
+        </td>
+      </tr>`).join("");
+  }
+
+  window.removeContact = function(i){
+    contacts.splice(i,1); saveContacts(); renderContacts();
+  };
+
+  function wireContacts(){
+    const btnAdd    = document.getElementById("btnAddContact");
+    const btnSave   = document.getElementById("btnSaveContact");
+    const btnCancel = document.getElementById("btnCancelContact");
+    const form      = document.getElementById("addContactForm");
+
+    btnAdd.addEventListener("click",()=>{ form.style.display="flex"; });
+    btnCancel.addEventListener("click",()=>{ form.style.display="none"; });
+    btnSave.addEventListener("click",()=>{
+      const name  = document.getElementById("newName").value.trim();
+      const email = document.getElementById("newEmail").value.trim();
+      const phone = document.getElementById("newPhone").value.trim();
+      if(!name){ alert("Name is required."); return; }
+      contacts.push({name,email,phone});
+      saveContacts(); renderContacts();
+      document.getElementById("newName").value="";
+      document.getElementById("newEmail").value="";
+      document.getElementById("newPhone").value="";
+      form.style.display="none";
+    });
+
+    // CSV import
+    document.getElementById("csvImport").addEventListener("change", e=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const lines = ev.target.result.split(/\r?\n/).filter(Boolean);
+        let added = 0;
+        for(const line of lines){
+          const [name,email,phone] = line.split(",").map(s=>s.trim().replace(/^"|"$/g,""));
+          if(name && name.toLowerCase()!=="name"){ contacts.push({name,email:email||"",phone:phone||""}); added++; }
+        }
+        saveContacts(); renderContacts();
+        alert(`Imported ${added} contact(s).`);
+      };
+      reader.readAsText(file);
+    });
+
+    // Alert all
+    document.getElementById("btnAlertAll").addEventListener("click",()=>{
+      if(!contacts.length){ alert("No contacts in your safe circle yet."); return; }
+      const msg = `EMERGENCY ALERT from SafeCircle: I need immediate help! Please check on me right away.`;
+      const emailList = contacts.filter(c=>c.email).map(c=>c.email).join(",");
+      if(emailList){
+        window.location.href = `mailto:${emailList}?subject=EMERGENCY+ALERT&body=${encodeURIComponent(msg)}`;
+      }
+      const banner = document.getElementById("alertBanner");
+      if(banner){ banner.style.display="block"; setTimeout(()=>banner.style.display="none",5000); }
+    });
+  }
+
+  // ─── Map modal close ──────────────────────────────────────────
+  function wireMapModal(){
+    document.getElementById("btnCloseMap").addEventListener("click", closeMapModal);
+    document.getElementById("psBackdrop").addEventListener("click", e=>{
+      if(e.target === document.getElementById("psBackdrop")) closeMapModal();
+    });
+    document.getElementById("btnPublicSafetyMap").addEventListener("click", showPublicSafetyMap);
+  }
+
+  // ─── Build visitAddress from the three fields ────────────────
+  function buildAddress(){
+    const num    = (document.getElementById("wStreetNum").value  || "").trim();
+    const street = (document.getElementById("wStreetName").value || "").trim();
+    const city   = (document.getElementById("wCityState").value  || "Memphis TN").trim();
+    const full   = [num, street, city].filter(Boolean).join(" ");
+    document.getElementById("visitAddress").value = full;
+    return full;
+  }
+
+  // ─── Run All Checks ────────────────────────────────────────────
+  async function runAllChecks(){
+    buildAddress();
+
+    // --- Geocode first ---
+    const geo = await geocodeVisit(true);
+
+    // --- Warrant: open Sheriff results in new tab ---
+    const s  = (document.getElementById("wStreetNum").value  || "").trim();
+    const st = (document.getElementById("wStreetName").value || "").trim();
+    if(s || st){
+      const warrantUrl = WARRANT_URL + "?w=&l=&f=&s=" + encodeURIComponent(s) + "&st=" + encodeURIComponent(st);
+      const warrantEl = document.getElementById("warrantResult");
+      if(warrantEl) warrantEl.innerHTML =
+        "<span style='color:#fbbf24;'>Results opened in new tab — </span>" +
+        "<a href='" + warrantUrl + "' target='_blank' style='color:#f59e0b;text-decoration:underline;font-size:.8rem;'>reopen &#x2197;</a>";
+      window.open(warrantUrl, "_blank");
+    }
+
+    // --- NSOPW: open in new tab ---
+    const addr = document.getElementById("visitAddress").value.trim();
+    if(addr){
+      const sorUrl = "https://www.nsopw.gov/Search/Results?street=" + encodeURIComponent(addr) + "&city=Memphis&state=TN";
+      const sorEl = document.getElementById("sorResult");
+      if(sorEl) sorEl.innerHTML =
+        "<span style='color:#c084fc;'>NSOPW opened in new tab — </span>" +
+        "<a href='" + sorUrl + "' target='_blank' style='color:#a855f7;text-decoration:underline;font-size:.8rem;'>reopen &#x2197;</a>";
+      window.open(sorUrl, "_blank");
+    }
+
+    // --- Incidents: load directly into accordion ---
+    if(geo){
+      // Open accordion
+      const body      = document.getElementById("crimeAccordionBodyDynamic");
+      const toggleBtn = document.getElementById("crimeAccordionToggleDynamic");
+      if(body && toggleBtn){
+        body.style.display = "block";
+        toggleBtn.textContent = "Close Public Safety";
+        toggleBtn.setAttribute("aria-expanded","true");
+        body.innerHTML = "<div style='font-size:.78rem;color:#64748b;'>Loading incidents…</div>";
+      }
+      await loadPublicSafety();
+      if(body) body.scrollIntoView({ behavior:"smooth", block:"start" });
+    }
+  }
+
+  // ─── Init ─────────────────────────────────────────────────────
+  window.addEventListener("load", ()=>{
+    // Run All button
+    document.getElementById("btnRunAll").addEventListener("click", runAllChecks);
+    // Enter on any address field also runs all
+    ["wStreetNum","wStreetName","wCityState"].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); runAllChecks(); } });
+    });
+
+    wireAccordion();
+    wireWarrants();
+    wireContacts();
+    wireMapModal();
+    renderContacts();
+    setGeoPill();
+    // Auto-run on load with default address
+    runAllChecks().catch(()=>{});
+  });
+</script>
+
+</body>
+</html>
