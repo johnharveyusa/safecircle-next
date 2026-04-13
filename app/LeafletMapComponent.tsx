@@ -159,7 +159,6 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     let cancelled = false;
     async function init() {
       const L = (await import('leaflet')).default;
-      await import('leaflet/dist/leaflet.css');
       LRef.current = L;
       if (cancelled || !geoRef.current) return;
       const { lat, lon } = geoRef.current;
@@ -167,7 +166,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       markersRef.current = [];
       const map = L.map('ps-map').setView([lat, lon], 14);
       mapRef.current = map;
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
       L.circleMarker([lat, lon], { radius: 10, fillColor: '#2563eb', color: '#fff', weight: 2, fillOpacity: 1 }).addTo(map).bindPopup(`<b>Address</b><br>${geoRef.current.label}`);
       L.circle([lat, lon], { radius: meters(RADIUS_MILES), color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '4 4' }).addTo(map);
       buildMarkers(L, map, markersRef.current);
@@ -187,7 +186,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       bigMarkersRef.current = [];
       const map = L.map('ps-map-big').setView([lat, lon], 14);
       bigMapRef.current = map;
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
       L.circleMarker([lat, lon], { radius: 10, fillColor: '#2563eb', color: '#fff', weight: 2, fillOpacity: 1 }).addTo(map).bindPopup(`<b>Address</b><br>${geoRef.current!.label}`);
       L.circle([lat, lon], { radius: meters(RADIUS_MILES), color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '4 4' }).addTo(map);
       buildMarkers(L, map, bigMarkersRef.current);
