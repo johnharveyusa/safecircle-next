@@ -1,26 +1,39 @@
-@import "tailwindcss";
 @import 'leaflet/dist/leaflet.css';
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── SafeCircle — Bold Modern Design ─────────────────────────── */
+
+/* Force Leaflet map to fill its container */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 16px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Dark theme popup */
+.leaflet-popup-content-wrapper {
+  background: #0f1f3d !important;
+  color: #e2e8f0 !important;
+  border: 1px solid #22d3ee !important;
+  border-radius: 12px !important;
+  box-shadow: 0 0 20px rgba(34,211,238,0.2) !important;
 }
+.leaflet-popup-tip { background: #0f1f3d !important; }
+.leaflet-popup-close-button { color: #94a3b8 !important; }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Glowing button pulse */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(34,211,238,0.4); }
+  50% { box-shadow: 0 0 24px rgba(34,211,238,0.8); }
 }
+.glow { animation: glow-pulse 2s infinite; }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* Smooth scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #0a0f1e; }
+::-webkit-scrollbar-thumb { background: #22d3ee; border-radius: 2px; }
+
+/* Remove default focus rings, add custom */
+*:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }

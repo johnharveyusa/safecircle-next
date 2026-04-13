@@ -1,115 +1,105 @@
 /**
  * app/api/contacts/route.ts
- * Finds nearest police, fire, hospital using Google Places API
- * Requires GOOGLE_MAPS_API_KEY environment variable
+ *
+ * Finds nearest police station, fire station, and hospital
+ * using the Google Places API (Nearby Search).
+ *
+ * Requires GOOGLE_MAPS_API_KEY in Vercel environment variables.
+ *
+ * First geocodes the address, then queries Places for each type.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { geocodeAddress, LatLng } from "@/lib/geocode";
 
-const PLACES_BASE = "https://maps.googleapis.com/maps/api/place";
-const SEARCH_RADIUS_METERS = 8000;
+const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY ?? "";
 
-export interface EmergencyContact {
-  type: "police" | "fire" | "hospital";
+interface PlaceResult {
   name: string;
   address: string;
-  phone: string;
-  distance_mi: number | null;
-  maps_url: string;
-  place_id: string;
+  phone?: string;
+  distance?: string;
+  lat: number;
+  lng: number;
 }
 
-const PLACE_TYPES: { type: EmergencyContact["type"]; googleType: string }[] = [
-  { type: "police", googleType: "police" },
-  { type: "fire", googleType: "fire_station" },
-  { type: "hospital", googleType: "hospital" },
-];
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.status !== "OK" || !data.results?.[0]) return null;
+  return data.results[0].geometry.location;
+}
 
-function haversineDistanceMi(a: LatLng, b: LatLng): number {
+async function findNearest(
+  lat: number,
+  lng: number,
+  type: string,
+  keyword?: string
+): Promise<PlaceResult | null> {
+  const kw = keyword ? `&keyword=${encodeURIComponent(keyword)}` : "";
+  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&rankby=distance&type=${type}${kw}&key=${GOOGLE_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.status !== "OK" || !data.results?.[0]) return null;
+
+  const place = data.results[0];
+  const plat = place.geometry.location.lat;
+  const plng = place.geometry.location.lng;
+
+  // Rough distance in miles
   const R = 3958.8;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const x =
+  const dLat = ((plat - lat) * Math.PI) / 180;
+  const dLng = ((plng - lng) * Math.PI) / 180;
+  const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) *
-      Math.cos((b.lat * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    Math.cos((lat * Math.PI) / 180) * Math.cos((plat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  const distMi = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = distMi < 0.1 ? `${Math.round(distMi * 5280)} ft` : `${distMi.toFixed(1)} mi`;
+
+  // Get phone via Place Details
+  let phone: string | undefined;
+  try {
+    const detailUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=formatted_phone_number&key=${GOOGLE_KEY}`;
+    const detailRes = await fetch(detailUrl);
+    const detailData = await detailRes.json();
+    phone = detailData.result?.formatted_phone_number;
+  } catch {}
+
+  return {
+    name: place.name,
+    address: place.vicinity ?? "",
+    phone,
+    distance,
+    lat: plat,
+    lng: plng,
+  };
 }
 
 export async function GET(req: NextRequest) {
-  const address = req.nextUrl.searchParams.get("address");
+  if (!GOOGLE_KEY) {
+    return NextResponse.json(
+      { error: "GOOGLE_MAPS_API_KEY not configured" },
+      { status: 500 }
+    );
+  }
+
+  const address = req.nextUrl.searchParams.get("address") ?? "";
   if (!address) {
     return NextResponse.json({ error: "address param required" }, { status: 400 });
   }
 
-  const key = process.env.GOOGLE_MAPS_API_KEY;
-  if (!key) {
-    return NextResponse.json({ error: "GOOGLE_MAPS_API_KEY not configured" }, { status: 500 });
+  const coords = await geocodeAddress(address);
+  if (!coords) {
+    return NextResponse.json({ error: "Could not geocode address" }, { status: 422 });
   }
 
-  try {
-    const center = await geocodeAddress(address);
-    const contacts: EmergencyContact[] = [];
+  const { lat, lng } = coords;
 
-    await Promise.all(
-      PLACE_TYPES.map(async ({ type, googleType }) => {
-        try {
-          const nearbyParams = new URLSearchParams({
-            location: `${center.lat},${center.lng}`,
-            radius: String(SEARCH_RADIUS_METERS),
-            type: googleType,
-            key,
-          });
+  const [police, fire, hospital] = await Promise.all([
+    findNearest(lat, lng, "police"),
+    findNearest(lat, lng, "fire_station"),
+    findNearest(lat, lng, "hospital"),
+  ]);
 
-          const nearbyRes = await fetch(`${PLACES_BASE}/nearbysearch/json?${nearbyParams}`);
-          if (!nearbyRes.ok) return;
-          const nearbyData = await nearbyRes.json();
-          const nearby = nearbyData.results?.[0];
-          if (!nearby) return;
-
-          const placeId = String(nearby.place_id ?? "");
-
-          // Get phone number from place details
-          const detailParams = new URLSearchParams({
-            place_id: placeId,
-            fields: "name,formatted_address,formatted_phone_number,geometry",
-            key,
-          });
-          const detailRes = await fetch(`${PLACES_BASE}/details/json?${detailParams}`);
-          const detailData = detailRes.ok ? await detailRes.json() : null;
-          const details = detailData?.result;
-
-          const loc = nearby.geometry?.location;
-          const distanceMi =
-            loc?.lat != null
-              ? Math.round(haversineDistanceMi(center, { lat: loc.lat, lng: loc.lng }) * 10) / 10
-              : null;
-
-          contacts.push({
-            type,
-            name: String(details?.name ?? nearby.name ?? ""),
-            address: String(details?.formatted_address ?? nearby.vicinity ?? ""),
-            phone: String(details?.formatted_phone_number ?? ""),
-            distance_mi: distanceMi,
-            maps_url: `https://www.google.com/maps/place/?q=place_id:${placeId}`,
-            place_id: placeId,
-          });
-        } catch {
-          // Skip if this type fails
-        }
-      })
-    );
-
-    contacts.sort((a, b) =>
-      ["police", "fire", "hospital"].indexOf(a.type) -
-      ["police", "fire", "hospital"].indexOf(b.type)
-    );
-
-    return NextResponse.json({ address, center, contacts });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json({ police, fire, hospital, coords: { lat, lng } });
 }
