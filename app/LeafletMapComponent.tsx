@@ -26,20 +26,28 @@ function warrantUrl(raw: string) {
 
 // ─── UCR colors ───────────────────────────────────────────────────────────────
 
-const UCR_COLORS: Record<string, string> = {
-  DRUGS: '#e05c2a', ASSAULT: '#c0392b', THEFT: '#2980b9',
-  BURGLARY: '#8e44ad', ROBBERY: '#922b21', VANDALISM: '#f39c12',
-  AUTO: '#16a085', WEAPONS: '#6d1f1f', HOMICIDE: '#111111',
-  SEX: '#76448a', OTHER: '#7f8c8d',
-};
-
 function getColor(cat: string): string {
-  if (!cat) return UCR_COLORS.OTHER;
+  if (!cat) return '#7f8c8d';
   const up = cat.toUpperCase();
-  for (const [k, v] of Object.entries(UCR_COLORS)) {
-    if (up.includes(k)) return v;
-  }
-  return UCR_COLORS.OTHER;
+  if (up.includes('HOMICIDE') || up.includes('MURDER') || up.includes('MANSL'))                   return '#1a1a2e';
+  if (up.includes('ROBBERY'))                                                                       return '#922b21';
+  if (up.includes('AGGRAVATED ASSAULT'))                                                            return '#c0392b';
+  if (up.includes('ASSAULT') || up.includes('BATTERY'))                                            return '#e74c3c';
+  if (up.includes('RAPE') || up.includes('SEX') || up.includes('PORN') || up.includes('OBSCN'))   return '#76448a';
+  if (up.includes('KIDNAP') || up.includes('ABDUCT'))                                              return '#6c3483';
+  if (up.includes('ARSON'))                                                                         return '#d35400';
+  if (up.includes('BURG') || up.includes('BREAK'))                                                 return '#8e44ad';
+  if (up.includes('DEST') || up.includes('VAND') || up.includes('DAM'))                           return '#f39c12';
+  if (up.includes('DRUG') || up.includes('NARC'))                                                  return '#e05c2a';
+  if (up.includes('WEAPON') || up.includes('FIREARM'))                                             return '#6d1f1f';
+  if (up.includes('MOTOR VEHICLE') || up.includes('VEHICLE THEFT'))                               return '#16a085';
+  if (up.includes('LARCENY') || up.includes('THEFT') || up.includes('SHOPLI'))                    return '#2980b9';
+  if (up.includes('FRAUD') || up.includes('COUNTERFEIT') || up.includes('FORG') || up.includes('EMBEZZL')) return '#f0b429';
+  if (up.includes('TRESPASS'))                                                                      return '#27ae60';
+  if (up.includes('DISORDERLY') || up.includes('DUI') || up.includes('INFLUENCE'))                return '#7f8c8d';
+  if (up.includes('STOLEN'))                                                                        return '#1abc9c';
+  if (up.includes('EXTORTION') || up.includes('BLACKMAIL'))                                       return '#884ea0';
+  return '#7f8c8d';
 }
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
@@ -292,11 +300,11 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
           const color = getColor(cat); const isActive = activeFilter === cat;
           return (
             <button key={cat} onClick={() => setActiveFilter(isActive ? null : cat)}
-              style={isActive ? { backgroundColor: color, borderColor: color } : {}}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${isActive ? 'text-white' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}>
-              <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: isActive ? '#fff' : color }}/>
+              style={{ backgroundColor: color, borderColor: color, opacity: isActive ? 1 : 0.72 }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border text-white transition-all hover:opacity-100">
+              <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 bg-white/40"/>
               {cat}
-              <span className={`px-1.5 py-0.5 rounded-full text-xs ${isActive ? 'bg-white/20 text-white' : 'bg-slate-700 text-slate-400'}`}>{count}</span>
+              <span className="px-1.5 py-0.5 rounded-full text-xs bg-black/20 text-white">{count}</span>
             </button>
           );
         })}
