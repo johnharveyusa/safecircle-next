@@ -221,8 +221,7 @@ function TrackingMap({ watcherLat, watcherLng, sessions }: {
 
   return (
     <div id="tracking-map"
-      style={{ width:'100%', borderRadius:16, border:'1px solid rgba(34,211,238,0.2)', overflow:'hidden' }}
-      style={{ height: '300px' }}
+      style={{ width:'100%', height:'300px', borderRadius:16, border:'1px solid rgba(34,211,238,0.2)', overflow:'hidden' }}
     />
   );
 }
