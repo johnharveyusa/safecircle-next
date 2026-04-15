@@ -1,39 +1,116 @@
 @import 'leaflet/dist/leaflet.css';
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
-/* ── SafeCircle — Bold Modern Design ─────────────────────────── */
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* Force Leaflet map to fill its container */
+body {
+  background: #050d1f;
+  color: #f1f5f9;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+/* ── Leaflet ── */
 .leaflet-container {
   width: 100% !important;
   height: 100% !important;
   border-radius: 16px;
+  background: #0a1628 !important;
 }
-
-/* Dark theme popup */
 .leaflet-popup-content-wrapper {
   background: #0f1f3d !important;
   color: #e2e8f0 !important;
   border: 1px solid #22d3ee !important;
   border-radius: 12px !important;
-  box-shadow: 0 0 20px rgba(34,211,238,0.2) !important;
+  box-shadow: 0 0 20px rgba(34,211,238,0.3) !important;
 }
 .leaflet-popup-tip { background: #0f1f3d !important; }
-.leaflet-popup-close-button { color: #94a3b8 !important; }
-
-/* Glowing button pulse */
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(34,211,238,0.4); }
-  50% { box-shadow: 0 0 24px rgba(34,211,238,0.8); }
+.leaflet-control-zoom a {
+  background: #0f1f3d !important;
+  color: #22d3ee !important;
+  border-color: rgba(34,211,238,0.3) !important;
 }
-.glow { animation: glow-pulse 2s infinite; }
 
-/* Smooth scrollbar */
+/* ── Crime filter buttons ── */
+.crime-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.crime-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+.crime-btn.active {
+  background: rgba(34,211,238,0.2);
+  border-color: #22d3ee;
+  color: #22d3ee;
+}
+.crime-btn .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.crime-count {
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
+/* ── Animations ── */
+@keyframes glow {
+  0%,100% { box-shadow: 0 0 8px rgba(34,211,238,0.4); }
+  50%      { box-shadow: 0 0 24px rgba(34,211,238,0.8); }
+}
+@keyframes pulse-red {
+  0%,100% { box-shadow: 0 0 8px rgba(239,68,68,0.5); }
+  50%      { box-shadow: 0 0 30px rgba(239,68,68,1); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: #0a0f1e; }
+::-webkit-scrollbar-track { background: #050d1f; }
 ::-webkit-scrollbar-thumb { background: #22d3ee; border-radius: 2px; }
 
-/* Remove default focus rings, add custom */
-*:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }
+/* ── Input focus ── */
+input:focus, textarea:focus {
+  outline: 2px solid rgba(34,211,238,0.5) !important;
+  outline-offset: 0;
+}
+
+/* ── Utility classes used in page ── */
+.flex { display: flex; }
+.flex-1 { flex: 1; }
+.gap-2 { gap: 8px; }
+.gap-1 { gap: 4px; }
+.space-y-2 > * + * { margin-top: 8px; }
+.space-y-3 > * + * { margin-top: 12px; }
+.space-y-4 > * + * { margin-top: 16px; }
+.w-full { width: 100%; }
+.text-center { text-align: center; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.font-mono { font-family: monospace; }
+.break-all { word-break: break-all; }
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.hidden { display: none; }
+.overflow-hidden { overflow: hidden; }
+.last\:border-0:last-child { border: 0; }

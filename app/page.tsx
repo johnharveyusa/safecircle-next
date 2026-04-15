@@ -54,42 +54,36 @@ function Section({ title, children, defaultOpen = false, dark = true }: { title:
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{
-      borderRadius: 20,
-      border: dark ? '1px solid rgba(34,211,238,0.2)' : '1px solid #bfdbfe',
-      background: dark
-        ? 'linear-gradient(135deg, #0f1f3d 0%, #0a1628 100%)'
-        : 'white',
-      overflow: 'hidden',
-      boxShadow: dark ? '0 4px 24px rgba(0,0,0,0.4)' : '0 2px 12px rgba(37,99,235,0.08)',
+      borderRadius:20,
+      border: dark ? '1px solid rgba(34,211,238,0.18)' : '1px solid #bfdbfe',
+      background: dark ? 'linear-gradient(135deg,#0f1f3d,#0a1628)' : 'white',
+      overflow:'hidden',
+      boxShadow: dark ? '0 4px 24px rgba(0,0,0,0.35)' : '0 2px 12px rgba(37,99,235,0.08)',
     }}>
       <button onClick={() => setOpen(o => !o)} style={{
-        width: '100%', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', padding: '14px 16px',
-        background: 'transparent', border: 'none', cursor: 'pointer',
-        textAlign: 'left',
+        width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+        padding:'14px 16px', background:'transparent', border:'none', cursor:'pointer', textAlign:'left',
       }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: dark ? '#f1f5f9' : '#1e3a5f' }}>{title}</span>
-        <span style={{
-          fontSize: 20, fontWeight: 700, lineHeight: 1,
-          color: open ? '#22d3ee' : (dark ? '#475569' : '#93c5fd'),
-        }}>{open ? '−' : '+'}</span>
+        <span style={{ fontSize:14, fontWeight:700, color: dark ? '#f1f5f9' : '#1e3a5f' }}>{title}</span>
+        <span style={{ fontSize:20, fontWeight:700, color: open ? '#22d3ee' : '#475569', lineHeight:1 }}>{open ? '−' : '+'}</span>
       </button>
       {open && <div style={{
-        padding: '8px 16px 16px',
-        borderTop: dark ? '1px solid rgba(34,211,238,0.15)' : '1px solid #bfdbfe',
+        padding:'8px 16px 16px',
+        borderTop: dark ? '1px solid rgba(34,211,238,0.12)' : '1px solid #bfdbfe',
       }}>{children}</div>}
     </div>
   );
 }
 
+
 // ─── Contact row ──────────────────────────────────────────────────────────────
 
 function ContactRow({ contact, onRemove }: { contact: Contact; onRemove: (id: string) => void }) {
   return (
-    <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid rgba(34,211,238,0.1)' }}>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
       <div>
-        <p style={{ fontSize:14, fontWeight:600, color: '#f1f5f9' }}>{contact.name}</p>
-        <p style={{ fontSize:11, color:'#64748b' }}>{contact.phone}{contact.phone && contact.email ? ' · ' : ''}{contact.email}</p>
+        <p className="text-sm font-medium text-slate-200">{contact.name}</p>
+        <p style={{ fontSize:11, color:"#64748b" }}>{contact.phone}{contact.phone && contact.email ? ' · ' : ''}{contact.email}</p>
       </div>
       <div className="flex gap-2 flex-shrink-0">
         {contact.phone && <a href={`tel:${contact.phone}`} className="text-xs px-2 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">Call</a>}
@@ -103,30 +97,26 @@ function ContactRow({ contact, onRemove }: { contact: Contact; onRemove: (id: st
 
 // ─── Service card ─────────────────────────────────────────────────────────────
 
-function ServiceCard({ emoji, label, svc, loading }: { emoji: string; label: string; svc: NearbyService | null; loading: boolean; darkMode?: boolean }) {
-  const cardStyle = { borderRadius:14, border:'1px solid rgba(34,211,238,0.15)',
-    background:'rgba(15,31,61,0.8)', padding:'12px 14px' };
+function ServiceCard({ emoji, label, svc, loading }: { emoji: string; label: string; svc: NearbyService | null; loading: boolean }) {
   if (loading) return (
-    <div style={cardStyle}>
-      <p style={{ fontSize:12, color:'#22d3ee' }}>{emoji} Locating nearest {label}…</p>
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3">
+      <p className="text-xs text-slate-400 animate-pulse">{emoji} Locating nearest {label}…</p>
     </div>
   );
   if (!svc) return (
-    <div style={cardStyle}>
-      <p style={{ fontSize:13, fontWeight:600, color:'#64748b' }}>{emoji} {label}</p>
-      <p style={{ fontSize:11, color:'#334155', marginTop:4 }}>Set an address above to find the nearest {label.toLowerCase()}.</p>
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3">
+      <p className="text-sm font-medium text-slate-400">{emoji} {label}</p>
+      <p className="text-xs text-slate-600 mt-1">Set an address above to find the nearest {label.toLowerCase()}.</p>
     </div>
   );
   return (
-    <div style={{ borderRadius:14, border:'1px solid rgba(34,211,238,0.25)',
-      background:'linear-gradient(135deg, #0f1f3d, #0a1628)', padding:'12px 14px',
-      boxShadow:'0 4px 20px rgba(0,0,0,0.3)' }}>
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-200">{emoji} {svc.name}</p>
           <p className="text-xs text-slate-500 truncate">{svc.address}</p>
-          {svc.distanceMi > 0 && <p className="text-xs text-slate-500">{svc.distanceMi.toFixed(1)} mi away</p>}
-          {svc.phone ? <a href={`tel:${svc.phone}`} className="text-xs text-blue-400 hover:underline">{svc.phone}</a>
+          {svc.distanceMi > 0 && <p style={{ fontSize:11, color:"#475569" }}>{svc.distanceMi.toFixed(1)} mi away</p>}
+          {svc.phone ? <a href={`tel:${svc.phone}`} style={{ fontSize:11, color:"#60a5fa", textDecoration:"underline" }}>{svc.phone}</a>
             : <p className="text-xs text-slate-600">Phone not available</p>}
         </div>
         <div className="flex flex-col gap-2 flex-shrink-0">
@@ -157,6 +147,7 @@ function TrackingMap({ watcherLat, watcherLng, sessions }: {
     let cancelled = false;
     async function init() {
       const L = (await import('leaflet')).default;
+      await import('leaflet/dist/leaflet.css');
       if (cancelled) return;
       LRef.current = L;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
@@ -221,12 +212,13 @@ function TrackingMap({ watcherLat, watcherLng, sessions }: {
 
   return (
     <div id="tracking-map"
-      style={{ width:'100%', height:'300px', borderRadius:16, border:'1px solid rgba(34,211,238,0.2)', overflow:'hidden' }}
+      className="w-full rounded-xl border border-slate-700 overflow-hidden"
+      style={{ height: '300px' }}
     />
   );
 }
 
-function TrackingTab({ contacts, darkMode }: { contacts: Contact[]; darkMode: boolean }) {
+function TrackingTab({ contacts }: { contacts: Contact[] }) {
   const [sessions,    setSessions]    = useState<TrackedPerson[]>([]);
   const [trackingOn,  setTrackingOn]  = useState(false);
   const [shareLink,   setShareLink]   = useState('');
@@ -318,22 +310,14 @@ function TrackingTab({ contacts, darkMode }: { contacts: Contact[]; darkMode: bo
   }, []);
 
   return (
-    <div className="space-y-4">
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
       {/* ── My location toggle ── */}
-      <div style={{
-            borderRadius: 20,
-            border: darkMode ? '1px solid rgba(34,211,238,0.25)' : '1px solid #bfdbfe',
-            background: darkMode
-              ? 'linear-gradient(135deg, #0f1f3d, #0a1628)'
-              : 'white',
-            padding: '14px 16px',
-            boxShadow: darkMode ? '0 0 30px rgba(34,211,238,0.05)' : '0 2px 12px rgba(37,99,235,0.08)',
-          }}>
+      <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 space-y-2">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-200">🔵 My Location</p>
-            <p className="text-xs text-slate-500">Show your position on the map below</p>
+            <p style={{ fontSize:11, color:"#475569" }}>Show your position on the map below</p>
           </div>
           {locStatus === 'active'
             ? <button onClick={stopMyLocation} className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:text-white transition-colors">Stop</button>
@@ -344,7 +328,7 @@ function TrackingTab({ contacts, darkMode }: { contacts: Contact[]; darkMode: bo
           <p className="text-xs text-blue-400">📍 Tracking your position · {watcherLat.toFixed(5)}, {watcherLng?.toFixed(5)}</p>
         )}
         {locStatus === 'denied' && (
-          <p className="text-xs text-rose-400">Location access denied — enable it in browser settings.</p>
+          <p style={{ fontSize:11, color:"#f87171" }}>Location access denied — enable it in browser settings.</p>
         )}
       </div>
 
@@ -369,12 +353,12 @@ function TrackingTab({ contacts, darkMode }: { contacts: Contact[]; darkMode: bo
             📍 Generate Check-In Link
           </button>
         ) : (
-          <div className="space-y-3">
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             <div className="rounded-xl bg-slate-800 border border-slate-700 px-3 py-2">
               <p className="text-xs text-slate-400 mb-1">Share this link — they tap it, location sharing is their choice:</p>
               <p className="text-xs text-emerald-400 font-mono break-all">{shareLink}</p>
             </div>
-            <div className="flex gap-2">
+            <div style={{ display:"flex", gap:8 }}>
               <button onClick={copyLink}
                 className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${copied ? 'bg-emerald-700 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'}`}>
                 {copied ? '✓ Copied!' : 'Copy Link'}
@@ -403,7 +387,7 @@ function TrackingTab({ contacts, darkMode }: { contacts: Contact[]; darkMode: bo
               <div key={s.id} className="flex items-center justify-between py-2 border-b border-slate-800 last:border-0 gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-200">📍 {s.name}</p>
-                  <p className="text-xs text-slate-500">Updated {Math.round((Date.now() - s.updatedAt) / 1000)}s ago</p>
+                  <p style={{ fontSize:11, color:"#475569" }}>Updated {Math.round((Date.now() - s.updatedAt) / 1000)}s ago</p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -418,7 +402,7 @@ function TrackingTab({ contacts, darkMode }: { contacts: Contact[]; darkMode: bo
         </div>
       )}
 
-      <div style={{ borderRadius:20, border:'1px solid rgba(34,211,238,0.1)', background:'rgba(15,31,61,0.5)', padding:'12px 16px' }}>
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 space-y-1.5 text-xs text-slate-500">
         <p className="font-medium text-slate-400">How it works</p>
         <p>1. Enable My Location — your blue dot appears on the map</p>
         <p>2. Tap Generate — a unique link is created for your worker</p>
@@ -444,11 +428,8 @@ type AlertPhase =
   | 'help'          // 🚨 HELP triggered
   | 'done';         // all clear
 
-function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; address: string; darkMode: boolean }) {
+function AlertsTab({ contacts, address }: { contacts: Contact[]; address: string }) {
   const [phase,         setPhase]         = useState<AlertPhase>('idle');
-  const [photo,         setPhoto]         = useState<string | null>(null);
-  const [photoLabel,    setPhotoLabel]    = useState('');
-  const cameraRef = useRef<HTMLInputElement | null>(null);
   const [intervalMin,   setIntervalMin]   = useState(30);
   const [customMin,     setCustomMin]     = useState('');
   const [secondsLeft,   setSecondsLeft]   = useState(0);
@@ -570,20 +551,6 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
     setPhase('done');
   }
 
-  // ── Camera capture ────────────────────────────────────────────────────────
-  function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setPhoto(reader.result as string);
-    reader.readAsDataURL(file);
-  }
-
-  function openCamera(label: string) {
-    setPhotoLabel(label);
-    cameraRef.current?.click();
-  }
-
   // ── Cancel alarm (3 taps) ─────────────────────────────────────────────────
   function handleCancelTap() {
     const next = cancelTaps + 1;
@@ -660,7 +627,7 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
   // ── IDLE / SETUP ───────────────────────────────────────────────────────────
   if (phase === 'idle') {
     return (
-      <div className="space-y-4">
+      <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
         <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-4 space-y-4">
           <div>
             <p className="text-sm font-semibold text-slate-200">🛡 Safety Check-In</p>
@@ -668,7 +635,7 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
           </div>
 
           {/* Timer selection */}
-          <div className="space-y-2">
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             <p className="text-xs text-slate-400 font-medium">Set your check-in interval</p>
             <div className="flex flex-wrap gap-2">
               {TIMER_PRESETS.map(m => (
@@ -678,11 +645,11 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2">
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <input type="number" min="1" max="480" placeholder="Custom min"
                 value={customMin} onChange={e => setCustomMin(e.target.value)}
                 className="w-28 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500" />
-              <span className="text-xs text-slate-500">minutes</span>
+              <span style={{ fontSize:11, color:"#475569" }}>minutes</span>
             </div>
             <p className="text-xs text-slate-600">
               ⚠ If you don't check in within {effectiveMin} min, an alert fires automatically.
@@ -695,33 +662,13 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
             </p>
           )}
 
-          {/* Hidden camera input */}
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment"
-            onChange={handlePhotoCapture} className="hidden" />
-
-          {/* Arrival photo */}
-          <div className="space-y-2">
-            <p className="text-xs text-slate-400 font-medium">📷 Arrival photo (optional)</p>
-            <button onClick={() => openCamera('Arrival')}
-              className="w-full py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-800 text-sm transition-colors">
-              📷 Take Arrival Photo
-            </button>
-            {photo && photoLabel === 'Arrival' && (
-              <div className="relative">
-                <img src={photo} alt="Arrival" className="w-full rounded-xl border border-slate-700 max-h-48 object-cover" />
-                <button onClick={() => setPhoto(null)} className="absolute top-2 right-2 bg-black/50 text-white rounded-full w-6 h-6 text-xs">✕</button>
-                <p className="text-xs text-emerald-400 mt-1">✓ Arrival photo captured</p>
-              </div>
-            )}
-          </div>
-
           <button onClick={handleArrival}
             className="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-base font-bold transition-colors">
             ▶ I've Arrived — Start Check-In
           </button>
         </div>
 
-        <div style={{ borderRadius:20, border:'1px solid rgba(34,211,238,0.1)', background:'rgba(15,31,61,0.5)', padding:'12px 16px' }}>
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 space-y-1.5 text-xs text-slate-500">
           <p className="font-medium text-slate-400">How it works</p>
           <p>1. Set your interval and tap Arrived</p>
           <p>2. Timer counts down — if it hits zero, alert fires automatically</p>
@@ -735,13 +682,13 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
 
   // ── RUNNING / DEPARTURE ────────────────────────────────────────────────────
   return (
-    <div className="space-y-4">
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
       {/* Timer display */}
       <div className={`rounded-2xl border px-4 py-5 text-center space-y-3 ${phase === 'departure' ? 'border-blue-700 bg-blue-950/40' : 'border-slate-700 bg-slate-900'}`}>
         <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
           {phase === 'departure' ? '🚶 Departure timer — get to your car' : '⏱ Visit check-in timer'}
         </p>
-        {address && <p className="text-xs text-slate-500">📍 {address}</p>}
+        {address && <p style={{ fontSize:11, color:"#475569" }}>📍 {address}</p>}
 
         {/* Progress ring (simple bar) */}
         <div className="w-full bg-slate-800 rounded-full h-2">
@@ -754,7 +701,7 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
         <p className={`text-5xl font-mono font-bold ${pct > 40 ? 'text-emerald-400' : pct > 15 ? 'text-amber-400' : 'text-red-400 animate-pulse'}`}>
           {timerStr}
         </p>
-        <p className="text-xs text-slate-500">remaining — alert fires automatically at 0:00</p>
+        <p style={{ fontSize:11, color:"#475569" }}>remaining — alert fires automatically at 0:00</p>
       </div>
 
       {/* Action buttons */}
@@ -778,23 +725,6 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
         </button>
       </div>
 
-      {/* Departure photo button — shown during departure phase */}
-      {phase === 'departure' && (
-        <div className="space-y-2">
-          <button onClick={() => openCamera('Departure')}
-            className="w-full py-2.5 rounded-xl border border-blue-600 text-blue-300 hover:bg-blue-900/30 text-sm transition-colors">
-            📷 Take Departure Photo
-          </button>
-          {photo && photoLabel === 'Departure' && (
-            <div className="relative">
-              <img src={photo} alt="Departure" className="w-full rounded-xl border border-slate-700 max-h-48 object-cover" />
-              <button onClick={() => setPhoto(null)} className="absolute top-2 right-2 bg-black/50 text-white rounded-full w-6 h-6 text-xs">✕</button>
-              <p className="text-xs text-blue-400 mt-1">✓ Departure photo captured</p>
-            </div>
-          )}
-        </div>
-      )}
-
       <p className="text-xs text-slate-600 text-center">
         Buttons are different sizes and shapes — readable under stress
       </p>
@@ -806,9 +736,228 @@ function AlertsTab({ contacts, address, darkMode }: { contacts: Contact[]; addre
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 
+
+// ─── Tab 4: Panic ─────────────────────────────────────────────────────────────
+function PanicTab({ contacts }: { contacts: Contact[] }) {
+  const [panicActive, setPanicActive] = useState(false);
+  const [cancelTaps,  setCancelTaps]  = useState(0);
+  const sirenRef = useRef<OscillatorNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  async function activatePanic() {
+    setPanicActive(true);
+    setCancelTaps(0);
+
+    // Siren via Web Audio
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(440, ctx.currentTime + 0.5);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 1);
+      gain.gain.setValueAtTime(1, ctx.currentTime);
+      osc.start(); sirenRef.current = osc;
+    } catch { }
+
+    // Camera
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      streamRef.current = stream;
+      const vid = document.getElementById('panic-video') as HTMLVideoElement;
+      if (vid) { vid.srcObject = stream; vid.play(); }
+    } catch { }
+
+    // SOS blast
+    for (const c of contacts) {
+      if (c.email) window.open(`mailto:${c.email}?subject=${encodeURIComponent('🆘 PANIC ALERT — I need help NOW')}&body=${encodeURIComponent('EMERGENCY: I have activated the SafeCircle panic button. I need immediate help. Please call 911 and come to my location immediately.')}`, '_blank');
+      if (c.phone) window.open(`sms:${c.phone}?body=${encodeURIComponent('🆘 PANIC ALERT: I need help NOW. Please call 911 and come to my location.')}`, '_blank');
+    }
+  }
+
+  function handleCancel() {
+    const next = cancelTaps + 1;
+    setCancelTaps(next);
+    if (next >= 3) {
+      setPanicActive(false);
+      setCancelTaps(0);
+      if (sirenRef.current) { try { sirenRef.current.stop(); } catch { } }
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); }
+    }
+  }
+
+  if (panicActive) return (
+    <div style={{ textAlign:'center' }}>
+      <div style={{ background:'linear-gradient(135deg,#1a0505,#0f0202)', border:'2px solid #ef4444',
+        borderRadius:20, padding:20, marginBottom:12, boxShadow:'0 0 40px rgba(239,68,68,0.4)' }}>
+        <div style={{ fontSize:14, fontWeight:700, color:'#ef4444', letterSpacing:2,
+          textTransform:'uppercase', marginBottom:8 }}>🆘 PANIC ACTIVE — SOS SENT</div>
+        <video id="panic-video" autoPlay muted playsInline
+          style={{ width:'100%', borderRadius:12, maxHeight:240, background:'#000', marginBottom:12 }} />
+        <p style={{ fontSize:12, color:'#94a3b8', marginBottom:16 }}>
+          Camera active · Siren on · Circle alerted
+        </p>
+        <button onClick={handleCancel} style={{
+          width:'100%', padding:14, borderRadius:14, border:'2px solid #ef4444',
+          background:'transparent', color:'#ef4444', fontWeight:700, fontSize:14, cursor:'pointer',
+        }}>
+          TAP 3× TO CANCEL ({3 - cancelTaps} taps remaining)
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Hero */}
+      <div style={{ textAlign:'center', marginBottom:20 }}>
+        <div style={{ width:72, height:72, borderRadius:'50%',
+          background:'linear-gradient(135deg,#ef4444,#dc2626)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          margin:'0 auto 10px', fontSize:32,
+          boxShadow:'0 0 30px rgba(239,68,68,0.6)' }}>📹</div>
+        <h2 style={{ fontSize:22, fontWeight:900, color:'white', margin:'0 0 4px' }}>Panic Camera</h2>
+        <p style={{ fontSize:12, color:'#64748b', margin:0 }}>One tap · camera + siren + SOS + GPS</p>
+      </div>
+
+      {/* Big panic button */}
+      <div style={{ textAlign:'center', marginBottom:20 }}>
+        <button onClick={activatePanic} style={{
+          width:180, height:180, borderRadius:'50%',
+          border:'4px solid rgba(239,68,68,0.5)',
+          background:'linear-gradient(135deg,#ef4444,#991b1b)',
+          color:'white', cursor:'pointer',
+          boxShadow:'0 0 40px rgba(239,68,68,0.5), 0 0 80px rgba(239,68,68,0.2)',
+          display:'inline-flex', flexDirection:'column' as const,
+          alignItems:'center', justifyContent:'center', gap:6,
+        }}>
+          <span style={{ fontSize:40 }}>🆘</span>
+          <span style={{ fontSize:15, fontWeight:900, letterSpacing:1 }}>PANIC</span>
+          <span style={{ fontSize:11, opacity:0.8, fontWeight:600 }}>TAP TO ACTIVATE</span>
+        </button>
+      </div>
+
+      {/* What happens */}
+      <div style={{ background:'linear-gradient(135deg,#0f1f3d,#0a1628)',
+        border:'1px solid rgba(239,68,68,0.2)', borderRadius:16, padding:14, marginBottom:12 }}>
+        <p style={{ fontSize:10, fontWeight:700, color:'#22d3ee', letterSpacing:2,
+          textTransform:'uppercase', margin:'0 0 10px' }}>When activated:</p>
+        {[
+          ['📹','#ef4444','Camera activates','Front or rear camera starts immediately'],
+          ['📢','#f97316','Loud siren sounds','Maximum volume to startle attacker'],
+          ['📱','#a855f7','SOS blast fires','Texts + emails your circle instantly'],
+          ['📍','#22d3ee','GPS location shared','Exact location sent to your circle'],
+        ].map(([icon,color,title,sub]) => (
+          <div key={title} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+            <div style={{ width:32, height:32, borderRadius:'50%', background:color,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:16, flexShrink:0 }}>{icon}</div>
+            <div>
+              <p style={{ fontSize:13, color:'white', fontWeight:600, margin:0 }}>{title}</p>
+              <p style={{ fontSize:11, color:'#64748b', margin:0 }}>{sub}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.2)',
+        borderRadius:14, padding:12, textAlign:'center' }}>
+        <p style={{ fontSize:12, color:'#22d3ee', margin:0, fontWeight:600 }}>
+          Triple-tap anywhere to cancel false alarm
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab 5: How To ────────────────────────────────────────────────────────────
+function HowToTab({ onShare, shareCopied }: { onShare: () => void; shareCopied: boolean }) {
+  const steps = [
+    { num:'1', color:'#22d3ee', title:'Enter your destination address', sub:'Street number + first word of street name only' },
+    { num:'2', color:'#ef4444', title:'Review the crime map', sub:'Color-coded incidents within 0.5mi · last 14 days' },
+    { num:'3', color:'#f59e0b', title:'Run warrant + offender checks', sub:'Shelby County Sheriff + NSOPW national registry' },
+    { num:'4', color:'#a855f7', title:'Add your circle of friends', sub:'They get your SOS if something goes wrong' },
+    { num:'5', color:'#10b981', title:'Start your check-in timer', sub:'Auto-fires SOS if you do not check in on time' },
+    { num:'🆘', color:'#ef4444', title:'Emergency — use Panic tab', sub:'Camera + siren + SOS + GPS in one tap' },
+  ];
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ textAlign:'center', marginBottom:16 }}>
+        <div style={{ width:64, height:64, borderRadius:'50%',
+          background:'linear-gradient(135deg,#10b981,#059669)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          margin:'0 auto 10px', fontSize:28,
+          boxShadow:'0 0 25px rgba(16,185,129,0.5)' }}>❓</div>
+        <h2 style={{ fontSize:22, fontWeight:900, color:'white', margin:'0 0 4px' }}>How to Use SafeCircle</h2>
+        <p style={{ fontSize:12, color:'#64748b', margin:0 }}>Watch the video or follow the steps below</p>
+      </div>
+
+      {/* YouTube video */}
+      <div style={{ borderRadius:16, overflow:'hidden', marginBottom:14,
+        border:'2px solid rgba(16,185,129,0.3)', background:'#000' }}>
+        <div style={{ position:'relative', paddingBottom:'56.25%', height:0 }}>
+          <iframe
+            style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }}
+            src="https://www.youtube.com/embed/Mwd0nktbu1I"
+            title="How to Use SafeCircle"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      </div>
+
+      {/* Steps */}
+      <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:14 }}>
+        {steps.map(s => (
+          <div key={s.num} style={{
+            background:'linear-gradient(135deg,#0f1f3d,#0a1628)',
+            borderLeft:`4px solid ${s.color}`,
+            borderRadius:'0 14px 14px 0',
+            padding:'12px 12px 12px 14px',
+            display:'flex', gap:12, alignItems:'center',
+          }}>
+            <div style={{ width:32, height:32, borderRadius:'50%', background:s.color,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontWeight:900, color:'white', fontSize:14, flexShrink:0 }}>{s.num}</div>
+            <div>
+              <p style={{ fontSize:13, color:'white', fontWeight:700, margin:0 }}>{s.title}</p>
+              <p style={{ fontSize:11, color:'#64748b', margin:0 }}>{s.sub}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Share + Donate */}
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        <button onClick={onShare} style={{
+          width:'100%', padding:12, borderRadius:14, border:'none',
+          background: shareCopied ? 'linear-gradient(90deg,#10b981,#059669)' : 'linear-gradient(90deg,#7c3aed,#4f46e5)',
+          color:'white', fontWeight:700, fontSize:14, cursor:'pointer',
+          boxShadow:'0 4px 20px rgba(124,58,237,0.4)',
+        }}>
+          {shareCopied ? '✓ Link copied! Opening SMS…' : '📲 Share SafeCircle with Friends'}
+        </button>
+        <a href="https://www.paypal.com/donate/?hosted_button_id=59GEQMLVVE68S"
+          target="_blank" rel="noopener noreferrer" style={{
+          display:'block', padding:12, borderRadius:14, textAlign:'center',
+          background:'linear-gradient(90deg,#0070ba,#003087)',
+          color:'white', fontWeight:700, fontSize:14, textDecoration:'none',
+          boxShadow:'0 4px 20px rgba(0,112,186,0.4)',
+        }}>
+          💙 Donate via PayPal / Venmo
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export default function SafeCirclePage() {
-  const [activeTab, setActiveTab] = useState<'main' | 'tracking' | 'alerts'>('main');
-  const [darkMode,  setDarkMode]  = useState(true);
+  const [activeTab, setActiveTab] = useState<'main' | 'tracking' | 'alerts' | 'panic' | 'howto'>('main');
+  const [showDisclaimer, setShowDisclaimer] = useState(true);
 
   // Address
   const [address,  setAddress]  = useState('');
@@ -881,6 +1030,24 @@ export default function SafeCirclePage() {
     setTimeout(() => setSosActive(false), 4000);
   }
 
+  // ── Share SafeCircle ────────────────────────────────────────────────────────
+  const [shareCopied, setShareCopied] = useState(false);
+  const SHARE_URL = 'https://safecircle.chat';
+  const SHARE_MSG = 'Stay safe with SafeCircle — free public safety app for Memphis field workers: ' + SHARE_URL;
+
+  async function shareApp() {
+    // Try native Web Share API first (works on mobile iOS/Android)
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'SafeCircle', text: SHARE_MSG, url: SHARE_URL });
+        return;
+      } catch { }
+    }
+    // Fallback: copy to clipboard + open SMS
+    try { await navigator.clipboard.writeText(SHARE_URL); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); } catch { }
+    setTimeout(() => { window.open(`sms:?body=${encodeURIComponent(SHARE_MSG)}`); }, 400);
+  }
+
   async function submitFeedback() {
     if (!feedback.trim()) return;
     setFeedbackSending(true);
@@ -898,144 +1065,181 @@ export default function SafeCirclePage() {
 
   // ── Tab bar ──────────────────────────────────────────────────────────────
   const tabs = [
-    { id: 'main',     label: '🛡 SafeCircle' },
-    { id: 'tracking', label: '📍 Tracking'   },
-    { id: 'alerts',   label: '🚨 Alerts'     },
+    { id: 'main',     label: '🛡',  sub: 'Safe'    },
+    { id: 'tracking', label: '📍',  sub: 'Track'   },
+    { id: 'alerts',   label: '🚨',  sub: 'Alerts'  },
+    { id: 'panic',    label: '📹',  sub: 'Panic'   },
+    { id: 'howto',    label: '❓',  sub: 'How To'  },
   ] as const;
 
   return (
     <div style={{
-      minHeight: '100vh',
-      background: darkMode
-        ? 'linear-gradient(160deg, #050d1f 0%, #0a1628 50%, #050d1f 100%)'
-        : 'linear-gradient(160deg, #e0f2fe 0%, #f0f9ff 50%, #e8f4fd 100%)',
-      color: darkMode ? '#f1f5f9' : '#0f172a',
-      maxWidth: 672, margin: '0 auto', display: 'flex', flexDirection: 'column',
+      minHeight:'100vh',
+      background:'linear-gradient(160deg,#050d1f 0%,#0a1628 50%,#050d1f 100%)',
+      color:'white', maxWidth:672, margin:'0 auto', display:'flex', flexDirection:'column'
     }}>
 
       {/* ── Tab bar ── */}
       <div style={{
-        position: 'sticky', top: 0, zIndex: 40,
-        background: darkMode
-          ? 'rgba(5,13,31,0.95)'
-          : 'rgba(255,255,255,0.95)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: darkMode ? '1px solid rgba(34,211,238,0.15)' : '1px solid #bfdbfe',
-        padding: '12px 16px 0',
+        position:'sticky', top:0, zIndex:40,
+        background:'rgba(5,13,31,0.97)',
+        backdropFilter:'blur(12px)',
+        borderBottom:'1px solid rgba(34,211,238,0.15)',
+        padding:'12px 16px 0',
       }}>
-        <div className="flex gap-1 items-center">
-          <button onClick={() => setDarkMode(d => !d)}
-            style={{
-              padding: '8px 10px', borderRadius: 10, fontSize: 16,
-              background: darkMode ? 'rgba(34,211,238,0.1)' : '#eff6ff',
-              border: darkMode ? '1px solid rgba(34,211,238,0.3)' : '1px solid #bfdbfe',
-              cursor: 'pointer', marginRight: 6,
-            }}
-            title="Toggle light/dark mode">
-            {darkMode ? '☀️' : '🌙'}
+        <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+          <button onClick={() => setDarkMode && setDarkMode((d:boolean) => !d)}
+            style={{ padding:'8px 10px', borderRadius:10, fontSize:16,
+              background:'rgba(34,211,238,0.1)', border:'1px solid rgba(34,211,238,0.3)',
+              cursor:'pointer', marginRight:4, color:'#f1f5f9' }}>
+            ☀️
           </button>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               style={{
-                flex: 1, padding: '10px 8px', borderRadius: '12px 12px 0 0',
-                fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
-                borderBottom: activeTab === t.id ? (darkMode ? '3px solid #22d3ee' : '3px solid #2563eb') : '3px solid transparent',
-                background: activeTab === t.id
-                  ? (darkMode ? 'rgba(34,211,238,0.1)' : '#eff6ff')
-                  : 'transparent',
-                color: activeTab === t.id
-                  ? (darkMode ? '#22d3ee' : '#2563eb')
-                  : (darkMode ? '#475569' : '#94a3b8'),
+                flex:1, padding:'10px 8px', borderRadius:'12px 12px 0 0',
+                fontSize:12, fontWeight:700, cursor:'pointer', border:'none',
+                borderBottom: activeTab === t.id ? '3px solid #22d3ee' : '3px solid transparent',
+                background: activeTab === t.id ? 'rgba(34,211,238,0.1)' : 'transparent',
+                color: activeTab === t.id ? '#22d3ee' : '#475569',
               }}>
-              {t.label}
+              <span style={{fontSize:16}}>{t.label}</span>
+              <span style={{fontSize:9,marginTop:2,display:'block'}}>{t.sub}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <main style={{ flex: 1, padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <main style={{ flex:1, padding:'20px 16px', display:'flex', flexDirection:'column', gap:16 }}>
 
         {/* ════════════════════════════ TAB 1 — MAIN ════════════════════════════ */}
         {activeTab === 'main' && (<>
 
-          <div className="text-center pb-1">
+          {/* ── Hero Header ── */}
+          <div style={{
+            borderRadius:24, padding:'24px 20px 20px',
+            background:'linear-gradient(135deg,#0f1f3d 0%,#0a1628 50%,#0f1f3d 100%)',
+            border:'1px solid rgba(34,211,238,0.2)',
+            boxShadow:'0 0 40px rgba(34,211,238,0.08)',
+            textAlign:'center',
+          }}>
+            {/* Shield icon */}
+            <div style={{
+              width:72, height:72, borderRadius:'50%', margin:'0 auto 12px',
+              background:'linear-gradient(135deg,#22d3ee,#3b82f6)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:36, boxShadow:'0 0 30px rgba(34,211,238,0.5)',
+            }}>🛡</div>
+
             <h1 style={{
-              fontSize: 28, fontWeight: 900, letterSpacing: '-0.5px',
-              background: 'linear-gradient(90deg, #22d3ee, #3b82f6, #a855f7)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
+              fontSize:38, fontWeight:900, letterSpacing:'-1px', margin:'0 0 4px',
+              background:'linear-gradient(90deg,#22d3ee,#3b82f6,#a855f7)',
+              WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
             }}>SafeCircle</h1>
-            <p style={{ fontSize: 11, color: darkMode ? '#64748b' : '#94a3b8', marginTop: 2 }}>
+
+            <p style={{ fontSize:13, color:'#64748b', margin:'0 0 16px' }}>
               Shelby County public safety · field worker edition
             </p>
+
+            {/* Stats bar */}
+            <div style={{
+              display:'flex', justifyContent:'center', gap:24, marginBottom:16,
+              padding:'12px 0', borderTop:'1px solid rgba(34,211,238,0.1)',
+              borderBottom:'1px solid rgba(34,211,238,0.1)',
+            }}>
+              {[['🔴','Crime Data'],['⚖️','Warrants'],['🔍','Offenders'],['🚨','Emergency']].map(([icon,label]) => (
+                <div key={label} style={{ textAlign:'center' }}>
+                  <div style={{ fontSize:20 }}>{icon}</div>
+                  <div style={{ fontSize:9, color:'#475569', fontWeight:600, letterSpacing:1, textTransform:'uppercase' }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Share button */}
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={shareApp} style={{
+                flex:1, padding:'12px', borderRadius:14,
+                background: shareCopied ? 'linear-gradient(90deg,#10b981,#059669)' : 'linear-gradient(90deg,#7c3aed,#4f46e5)',
+                color:'white', fontWeight:700, fontSize:13, border:'none', cursor:'pointer',
+                boxShadow: shareCopied ? '0 4px 20px rgba(16,185,129,0.4)' : '0 4px 20px rgba(124,58,237,0.4)',
+              }}>
+                {shareCopied ? '✓ Copied!' : '📲 Share'}
+              </button>
+              <button onClick={() => setActiveTab('howto')} style={{
+                flex:1, padding:'12px', borderRadius:14,
+                background:'linear-gradient(90deg,#10b981,#059669)',
+                color:'white', fontWeight:700, fontSize:13, border:'none', cursor:'pointer',
+                boxShadow:'0 4px 20px rgba(16,185,129,0.4)',
+              }}>
+                ❓ How To
+              </button>
+            </div>
           </div>
 
           {/* Address bar */}
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 space-y-2">
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: darkMode ? '#22d3ee' : '#3b82f6', textTransform: 'uppercase' }}>Address</p>
-            <p style={{ fontSize: 11, color: darkMode ? '#475569' : '#94a3b8' }}>Street number and name only — no Rd, St, Ave, or Cove. Type <span className="text-slate-300">Macon</span>, not Macon Road.</p>
-            <div className="flex gap-2">
+          <div style={{
+            borderRadius:20, border:'1px solid rgba(34,211,238,0.25)',
+            background:'linear-gradient(135deg,#0f1f3d,#0a1628)',
+            padding:'16px', boxShadow:'0 4px 24px rgba(0,0,0,0.4)',
+          }}>
+            <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, color:'#22d3ee', textTransform:'uppercase' }}>Address</p>
+            <p style={{ fontSize:11, color:'#475569' }}>Street number and name only — no Rd, St, Ave, or Cove.</p>
+            <div style={{ display:"flex", gap:8 }}>
               <input type="text" placeholder="4128 Weymouth" value={address}
                 onChange={e => { setAddress(e.target.value); setAddrSet(false); setGeoLabel(''); }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSetAddress(); }}
-                style={{
-                  flex: 1, padding: '10px 14px', borderRadius: 12, fontSize: 14,
-                  background: darkMode ? 'rgba(255,255,255,0.05)' : 'white',
-                  border: darkMode ? '1px solid rgba(34,211,238,0.3)' : '1px solid #bfdbfe',
-                  color: darkMode ? 'white' : '#0f172a',
-                  outline: 'none',
-                }} />
+                style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:14,
+                  background:'rgba(255,255,255,0.06)', border:'1px solid rgba(34,211,238,0.3)',
+                  color:'white', outline:'none' }} />
               <button onClick={handleSetAddress} disabled={!address.trim()}
-                style={{
-                padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700,
-                color: 'white', whiteSpace: 'nowrap', border: 'none', cursor: 'pointer',
-                background: 'linear-gradient(90deg, #22d3ee, #3b82f6)',
-                boxShadow: '0 4px 15px rgba(34,211,238,0.35)',
-              }}>
+                style={{ padding:'10px 18px', borderRadius:12, fontSize:13, fontWeight:700,
+                  color:'white', border:'none', cursor:'pointer', whiteSpace:'nowrap',
+                  background:'linear-gradient(90deg,#22d3ee,#3b82f6)',
+                  boxShadow:'0 4px 15px rgba(34,211,238,0.35)' }}>
                 Set address
               </button>
             </div>
-            {addrSet && <p className="text-xs text-emerald-400 font-medium">✓ {geoLabel || (address.trim() + ', Memphis TN')}</p>}
+            {addrSet && <p style={{ fontSize:11, color:'#10b981', fontWeight:600 }}>✓ {geoLabel || (address.trim() + ', Memphis TN')}</p>}
           </div>
 
           {/* Crime map */}
-          <Section title="🗺  Crime incidents — last 14 days, 0.5 mi radius" defaultOpen dark={darkMode}>
+          <Section title="🗺  Crime incidents — last 14 days, 0.5 mi radius" dark={true} defaultOpen>
             <LeafletMapComponent lockedAddress={addrSet ? address : undefined} />
           </Section>
 
           {/* Warrants */}
-          <Section title="⚖️  Warrant search" dark={darkMode}>
-            <p className="text-xs text-slate-400 mb-3">Shelby County Sheriff's warrant database.</p>
+          <Section title="⚖️  Warrant search" dark={true}>
+            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>Shelby County Sheriff's warrant database.</p>
             {address.trim() ? (
-              <div className="space-y-2">
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 <a href={warrantUrl(address)} target="_blank" rel="noopener noreferrer"
-                  style={{ display:'inline-block', padding:'10px 18px', borderRadius:12, fontSize:13, fontWeight:700, color:'white', background:'linear-gradient(90deg,#f59e0b,#d97706)', boxShadow:'0 4px 15px rgba(245,158,11,0.35)', textDecoration:'none' }}>
+                  style={{ display:"inline-block", padding:"10px 20px", borderRadius:12, fontSize:13, fontWeight:700, color:"white", textDecoration:"none", background:"linear-gradient(90deg,#f59e0b,#d97706)", boxShadow:"0 4px 15px rgba(245,158,11,0.4)" }}>
                   Check warrants — {splitAddress(address).num} {splitAddress(address).name.split(/\s+/)[0]} →
                 </a>
-                <p className="text-xs text-slate-500">Search by name: <a href="https://warrants.shelby-sheriff.org/w_warrant_result.php" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">Open warrant search</a></p>
+                <p style={{ fontSize:11, color:"#475569" }}>Search by name: <a href="https://warrants.shelby-sheriff.org/w_warrant_result.php" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">Open warrant search</a></p>
               </div>
-            ) : <p className="text-xs text-slate-500">Enter an address above first.</p>}
+            ) : <p style={{ fontSize:11, color:"#475569" }}>Enter an address above first.</p>}
           </Section>
 
           {/* Sex offenders */}
-          <Section title="🔍  Sex offender registry" dark={darkMode}>
-            <p className="text-xs text-slate-400 mb-3">National Sex Offender Public Website (NSOPW) check.</p>
+          <Section title="🔍  Sex offender registry" dark={true}>
+            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>National Sex Offender Public Website (NSOPW) check.</p>
             {address.trim()
-              ? <a href={offenderUrl(address)} target="_blank" rel="noopener noreferrer" style={{ display:'inline-block', padding:'10px 18px', borderRadius:12, fontSize:13, fontWeight:700, color:'white', background:'linear-gradient(90deg,#a855f7,#7c3aed)', boxShadow:'0 4px 15px rgba(168,85,247,0.35)', textDecoration:'none' }}>Check sex offenders near {address.trim()} →</a>
-              : <p className="text-xs text-slate-500">Enter an address above first.</p>}
+              ? <a href={offenderUrl(address)} target="_blank" rel="noopener noreferrer" style={{ display:"inline-block", padding:"10px 20px", borderRadius:12, fontSize:13, fontWeight:700, color:"white", textDecoration:"none", background:"linear-gradient(90deg,#a855f7,#7c3aed)", boxShadow:"0 4px 15px rgba(168,85,247,0.4)" }}>Check sex offenders near {address.trim()} →</a>
+              : <p style={{ fontSize:11, color:"#475569" }}>Enter an address above first.</p>}
           </Section>
 
           {/* Jail roster */}
-          <Section title="🏛  Shelby County jail roster" dark={darkMode}>
-            <p className="text-xs text-slate-400 mb-3">Who is currently in custody.</p>
-            <a href={JAIL_URL} target="_blank" rel="noopener noreferrer" style={{ display:'inline-block', padding:'10px 18px', borderRadius:12, fontSize:13, fontWeight:700, color:'white', background:'linear-gradient(90deg,#475569,#334155)', boxShadow:'0 4px 15px rgba(71,85,105,0.35)', textDecoration:'none' }}>Open jail roster →</a>
+          <Section title="🏛  Shelby County jail roster" dark={true}>
+            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>Who is currently in custody.</p>
+            <a href={JAIL_URL} target="_blank" rel="noopener noreferrer" style={{ display:"inline-block", padding:"10px 20px", borderRadius:12, fontSize:13, fontWeight:700, color:"white", textDecoration:"none", background:"linear-gradient(90deg,#06b6d4,#0891b2)", boxShadow:"0 4px 15px rgba(6,182,212,0.4)" }}>Open jail roster →</a>
           </Section>
 
           {/* Emergency services */}
-          <Section title="🚨  Nearest police · fire · hospital" dark={darkMode}>
-            <p className="text-xs text-slate-400 mb-3">{addrSet ? 'Nearest services — tap Call or Directions.' : 'Set an address above first.'}</p>
+          <Section title="🚨  Nearest police · fire · hospital" dark={true}>
+            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>{addrSet ? 'Nearest services — tap Call or Directions.' : 'Set an address above first.'}</p>
             {svcError && <p className="text-xs text-rose-400 mb-2">{svcError}</p>}
-            <div className="space-y-3">
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
               <ServiceCard emoji="🚓" label="Police"   svc={services.police}   loading={svcLoading} />
               <ServiceCard emoji="🚒" label="Fire"     svc={services.fire}     loading={svcLoading} />
               <ServiceCard emoji="🏥" label="Hospital" svc={services.hospital} loading={svcLoading} />
@@ -1043,78 +1247,83 @@ export default function SafeCirclePage() {
           </Section>
 
           {/* Circle of friends + SOS */}
-          <Section title="👥  Circle of friends &amp; SOS alert" dark={darkMode}>
+          <Section title="👥  Circle of friends &amp; SOS alert" dark={true}>
             <button onClick={triggerSos} disabled={contacts.length === 0}
-              className={`w-full py-3 rounded-xl text-base font-semibold mb-4 transition-all ${sosActive ? 'bg-red-500 text-white animate-pulse' : contacts.length === 0 ? 'bg-slate-800 text-slate-600 cursor-not-allowed opacity-50' : 'bg-red-700 hover:bg-red-600 text-white'}`}>
+              style={{ width:'100%', padding:'14px', borderRadius:14, fontSize:16, fontWeight:900,
+              border:'none', cursor: contacts.length === 0 ? 'not-allowed' : 'pointer',
+              background: sosActive ? '#ef4444' : contacts.length === 0 ? '#1e293b' : 'linear-gradient(90deg,#ef4444,#dc2626)',
+              color: contacts.length === 0 ? '#475569' : 'white', marginBottom:16,
+              boxShadow: sosActive || contacts.length > 0 ? '0 4px 20px rgba(239,68,68,0.5)' : 'none',
+            }}>
               {sosActive ? '🚨 SOS SENT' : '🚨 SOS — Alert my circle NOW'}
             </button>
-            {contacts.length === 0 && <p className="text-xs text-slate-500 mb-3 -mt-2">Add contacts below to enable SOS.</p>}
-            {contacts.length > 0 && <div className="mb-4">{contacts.map(c => <ContactRow key={c.id} contact={c} onRemove={id => setContacts(c => c.filter(x => x.id !== id))} />)}</div>}
+            {contacts.length === 0 && <p style={{ fontSize:11, color:"#475569", marginBottom:12, marginTop:-8 }}>Add contacts below to enable SOS.</p>}
+            {contacts.length > 0 && <div style={{ marginBottom:16 }}>{contacts.map(c => <ContactRow key={c.id} contact={c} onRemove={id => setContacts(c => c.filter(x => x.id !== id))} />)}</div>}
             <div className="space-y-2 mb-4">
-              <p className="text-xs text-slate-400 font-medium">Add a contact</p>
-              <input type="text" placeholder="Full name" value={newName} onChange={e => setNewName(e.target.value)} style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
-              <div className="flex gap-2">
-                <input type="tel" placeholder="Phone" value={newPhone} onChange={e => setNewPhone(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500" />
-                <input type="email" placeholder="Email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500" />
+              <p style={{ fontSize:11, color:"#64748b", fontWeight:600 }}>Add a contact</p>
+              <input type="text" placeholder="Full name" value={newName} onChange={e => setNewName(e.target.value)} style={{ width:"100%", padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none", boxSizing:"border-box" }} />
+              <div style={{ display:"flex", gap:8 }}>
+                <input type="tel" placeholder="Phone" value={newPhone} onChange={e => setNewPhone(e.target.value)} style={{ flex:1, padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none" }} />
+                <input type="email" placeholder="Email" value={newEmail} onChange={e => setNewEmail(e.target.value)} style={{ flex:1, padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none" }} />
               </div>
-              <button onClick={addContact} style={{ padding:'10px 20px', borderRadius:12, fontSize:13, fontWeight:700, color:'white', background:'linear-gradient(90deg,#22d3ee,#3b82f6)', border:'none', cursor:'pointer' }}>Add contact</button>
+              <button onClick={addContact} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Add contact</button>
             </div>
-            <div className="space-y-2">
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               <p className="text-xs text-slate-400 font-medium">Import from CSV</p>
-              <p className="text-xs text-slate-500">One per line: Full Name, Email, Phone</p>
-              <textarea rows={3} placeholder={'Jane Smith, jane@example.com, 901-555-1234'} value={csvInput} onChange={e => setCsvInput(e.target.value)} style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:12, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', color:'white', outline:'none', fontFamily:'monospace', boxSizing:'border-box' }} />
-              <button onClick={importCsv} style={{ padding:'10px 20px', borderRadius:12, fontSize:13, fontWeight:700, color:'white', background:'linear-gradient(90deg,#3b82f6,#6366f1)', border:'none', cursor:'pointer' }}>Import contacts</button>
+              <p style={{ fontSize:11, color:"#475569" }}>One per line: Full Name, Email, Phone</p>
+              <textarea rows={3} placeholder={'Jane Smith, jane@example.com, 901-555-1234'} value={csvInput} onChange={e => setCsvInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono" />
+              <button onClick={importCsv} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Import contacts</button>
             </div>
           </Section>
 
           {/* ── Kaizen feedback ── */}
-          <Section title="💡 Make SafeCircle Better" dark={darkMode}>
+          <Section title="💡 Make SafeCircle Better" dark={true}>
             {feedbackSent ? (
               <div className="text-center py-4 space-y-2">
                 <p className="text-2xl">🙏</p>
                 <p className="text-sm font-medium text-emerald-400">Thank you — your feedback was sent!</p>
-                <p className="text-xs text-slate-500">We read every suggestion.</p>
+                <p style={{ fontSize:11, color:"#475569" }}>We read every suggestion.</p>
                 <button onClick={() => setFeedbackSent(false)} className="text-xs text-blue-400 underline mt-2">Send another</button>
               </div>
             ) : (
-              <div className="space-y-3">
-                <p style={{ fontSize:11, color:'#64748b' }}>What would make SafeCircle more useful for you? Tell us anything — features, problems, ideas.</p>
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                <p style={{ fontSize:11, color:"#64748b" }}>What would make SafeCircle more useful for you? Tell us anything — features, problems, ideas.</p>
                 <textarea rows={4} placeholder="e.g. I wish it could show me if there were recent calls for service at the address before I even get there..."
                   value={feedback} onChange={e => setFeedback(e.target.value)}
-                  style={{
-                    width: '100%', padding: '12px 14px', borderRadius: 12, fontSize: 13,
-                    background: darkMode ? 'rgba(255,255,255,0.05)' : 'white',
-                    border: darkMode ? '1px solid rgba(34,211,238,0.3)' : '1px solid #bfdbfe',
-                    color: darkMode ? 'white' : '#0f172a',
-                    outline: 'none', resize: 'vertical', boxSizing: 'border-box',
-                  }} />
-                <div className="flex gap-2">
+                  style={{ width:"100%", padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none", boxSizing:"border-box" }} />
+                <div style={{ display:"flex", gap:8 }}>
                   <input type="text" placeholder="Your role (e.g. Home health nurse)" value={feedbackRole} onChange={e => setFeedbackRole(e.target.value)}
-                    style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:13,
-                      background: darkMode ? 'rgba(255,255,255,0.05)':'white',
-                      border: darkMode ? '1px solid rgba(34,211,238,0.3)':'1px solid #bfdbfe',
-                      color: darkMode ? 'white':'#0f172a', outline:'none' }} />
+                    style={{ flex:1, padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none" }} />
                   <input type="email" placeholder="Email (optional)" value={feedbackEmail} onChange={e => setFeedbackEmail(e.target.value)}
-                    style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:13,
-                      background: darkMode ? 'rgba(255,255,255,0.05)':'white',
-                      border: darkMode ? '1px solid rgba(34,211,238,0.3)':'1px solid #bfdbfe',
-                      color: darkMode ? 'white':'#0f172a', outline:'none' }} />
+                    style={{ flex:1, padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none" }} />
                 </div>
                 <button onClick={submitFeedback} disabled={!feedback.trim() || feedbackSending}
-                  style={{ padding:'10px 20px', borderRadius:12, fontSize:13, fontWeight:700,
-                    color:'white', border:'none', cursor:'pointer',
-                    background:'linear-gradient(90deg, #22d3ee, #3b82f6)',
-                    boxShadow:'0 4px 15px rgba(34,211,238,0.3)', opacity: (!feedback.trim() || feedbackSending) ? 0.4 : 1 }}>
+                  className="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-sm font-medium text-white transition-colors">
                   {feedbackSending ? 'Sending…' : 'Send Feedback'}
                 </button>
               </div>
             )}
           </Section>
 
+
+
           {/* Footer */}
-          <div className="text-center py-4">
+          <div style={{ textAlign:'center', padding:'16px 0 8px' }}>
+            {/* PayPal Donate Button */}
+            <a href="https://www.paypal.com/donate/?hosted_button_id=59GEQMLVVE68S"
+              target="_blank" rel="noopener noreferrer"
+              style={{
+                display:'inline-block', padding:'12px 32px', borderRadius:30,
+                background:'linear-gradient(90deg,#0070ba,#003087)',
+                color:'white', fontWeight:700, fontSize:14, textDecoration:'none',
+                boxShadow:'0 4px 20px rgba(0,112,186,0.5)',
+                marginBottom:12,
+              }}>
+              💙 Donate via PayPal / Venmo
+            </a>
+            <br />
             <a href={USC_URL} target="_blank" rel="noopener noreferrer"
-  style={{ fontSize:11, color: darkMode ? '#334155':'#94a3b8', textDecoration:'none' }}>
+              style={{ fontSize:11, color:'#334155', textDecoration:'none' }}>
               Powered by U.S. Crime Centers
             </a>
           </div>
@@ -1123,12 +1332,22 @@ export default function SafeCirclePage() {
 
         {/* ══════════════════════════ TAB 2 — TRACKING ══════════════════════════ */}
         {activeTab === 'tracking' && (
-          <TrackingTab contacts={contacts} darkMode={darkMode} />
+          <TrackingTab contacts={contacts} />
         )}
 
         {/* ═══════════════════════════ TAB 3 — ALERTS ══════════════════════════ */}
         {activeTab === 'alerts' && (
-          <AlertsTab contacts={contacts} address={address} darkMode={darkMode} />
+          <AlertsTab contacts={contacts} address={address} />
+        )}
+
+        {/* ═══════════════════════════ TAB 4 — PANIC ═══════════════════════════ */}
+        {activeTab === 'panic' && (
+          <PanicTab contacts={contacts} />
+        )}
+
+        {/* ═══════════════════════════ TAB 5 — HOW TO ══════════════════════════ */}
+        {activeTab === 'howto' && (
+          <HowToTab onShare={shareApp} shareCopied={shareCopied} />
         )}
 
       </main>

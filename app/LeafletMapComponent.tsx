@@ -26,28 +26,20 @@ function warrantUrl(raw: string) {
 
 // ─── UCR colors ───────────────────────────────────────────────────────────────
 
+const UCR_COLORS: Record<string, string> = {
+  DRUGS: '#e05c2a', ASSAULT: '#c0392b', THEFT: '#2980b9',
+  BURGLARY: '#8e44ad', ROBBERY: '#922b21', VANDALISM: '#f39c12',
+  AUTO: '#16a085', WEAPONS: '#6d1f1f', HOMICIDE: '#111111',
+  SEX: '#76448a', OTHER: '#7f8c8d',
+};
+
 function getColor(cat: string): string {
-  if (!cat) return '#7f8c8d';
+  if (!cat) return UCR_COLORS.OTHER;
   const up = cat.toUpperCase();
-  if (up.includes('HOMICIDE') || up.includes('MURDER') || up.includes('MANSL'))                   return '#1a1a2e';
-  if (up.includes('ROBBERY'))                                                                       return '#922b21';
-  if (up.includes('AGGRAVATED ASSAULT'))                                                            return '#c0392b';
-  if (up.includes('ASSAULT') || up.includes('BATTERY'))                                            return '#e74c3c';
-  if (up.includes('RAPE') || up.includes('SEX') || up.includes('PORN') || up.includes('OBSCN'))   return '#76448a';
-  if (up.includes('KIDNAP') || up.includes('ABDUCT'))                                              return '#6c3483';
-  if (up.includes('ARSON'))                                                                         return '#d35400';
-  if (up.includes('BURG') || up.includes('BREAK'))                                                 return '#8e44ad';
-  if (up.includes('DEST') || up.includes('VAND') || up.includes('DAM'))                           return '#f39c12';
-  if (up.includes('DRUG') || up.includes('NARC'))                                                  return '#e05c2a';
-  if (up.includes('WEAPON') || up.includes('FIREARM'))                                             return '#6d1f1f';
-  if (up.includes('MOTOR VEHICLE') || up.includes('VEHICLE THEFT'))                               return '#16a085';
-  if (up.includes('LARCENY') || up.includes('THEFT') || up.includes('SHOPLI'))                    return '#2980b9';
-  if (up.includes('FRAUD') || up.includes('COUNTERFEIT') || up.includes('FORG') || up.includes('EMBEZZL')) return '#f0b429';
-  if (up.includes('TRESPASS'))                                                                      return '#27ae60';
-  if (up.includes('DISORDERLY') || up.includes('DUI') || up.includes('INFLUENCE'))                return '#7f8c8d';
-  if (up.includes('STOLEN'))                                                                        return '#1abc9c';
-  if (up.includes('EXTORTION') || up.includes('BLACKMAIL'))                                       return '#884ea0';
-  return '#7f8c8d';
+  for (const [k, v] of Object.entries(UCR_COLORS)) {
+    if (up.includes(k)) return v;
+  }
+  return UCR_COLORS.OTHER;
 }
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
@@ -167,6 +159,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     let cancelled = false;
     async function init() {
       const L = (await import('leaflet')).default;
+      await import('leaflet/dist/leaflet.css');
       LRef.current = L;
       if (cancelled || !geoRef.current) return;
       const { lat, lon } = geoRef.current;
@@ -174,7 +167,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       markersRef.current = [];
       const map = L.map('ps-map').setView([lat, lon], 14);
       mapRef.current = map;
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
       L.circleMarker([lat, lon], { radius: 10, fillColor: '#2563eb', color: '#fff', weight: 2, fillOpacity: 1 }).addTo(map).bindPopup(`<b>Address</b><br>${geoRef.current.label}`);
       L.circle([lat, lon], { radius: meters(RADIUS_MILES), color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '4 4' }).addTo(map);
       buildMarkers(L, map, markersRef.current);
@@ -194,7 +187,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       bigMarkersRef.current = [];
       const map = L.map('ps-map-big').setView([lat, lon], 14);
       bigMapRef.current = map;
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
       L.circleMarker([lat, lon], { radius: 10, fillColor: '#2563eb', color: '#fff', weight: 2, fillOpacity: 1 }).addTo(map).bindPopup(`<b>Address</b><br>${geoRef.current!.label}`);
       L.circle([lat, lon], { radius: meters(RADIUS_MILES), color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '4 4' }).addTo(map);
       buildMarkers(L, map, bigMarkersRef.current);
@@ -289,22 +282,35 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
 
   // ── Filter bar ────────────────────────────────────────────────────────────
   function FilterBar() {
+    const btnBase: React.CSSProperties = {
+      display:'inline-flex', alignItems:'center', gap:6,
+      padding:'5px 12px', borderRadius:20, fontSize:11, fontWeight:600,
+      cursor:'pointer', border:'1px solid', whiteSpace:'nowrap',
+      transition:'all 0.2s',
+    };
     return (
-      <div className="flex flex-wrap gap-1.5">
-        <button onClick={() => setActiveFilter(null)}
-          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${activeFilter === null ? 'bg-slate-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:8 }}>
+        <button onClick={() => setActiveFilter(null)} style={{
+          ...btnBase,
+          background: activeFilter === null ? 'rgba(34,211,238,0.2)' : 'rgba(255,255,255,0.06)',
+          borderColor: activeFilter === null ? '#22d3ee' : 'rgba(255,255,255,0.15)',
+          color: activeFilter === null ? '#22d3ee' : '#94a3b8',
+        }}>
           All
-          <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeFilter === null ? 'bg-white/20' : 'bg-slate-700 text-slate-400'}`}>{incidents.length}</span>
+          <span style={{ background:'rgba(255,255,255,0.15)', borderRadius:10, padding:'1px 6px', fontSize:10 }}>{incidents.length}</span>
         </button>
         {categoryCounts.map(([cat, count]) => {
           const color = getColor(cat); const isActive = activeFilter === cat;
           return (
-            <button key={cat} onClick={() => setActiveFilter(isActive ? null : cat)}
-              style={{ backgroundColor: color, borderColor: color, opacity: isActive ? 1 : 0.72 }}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border text-white transition-all hover:opacity-100">
-              <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 bg-white/40"/>
+            <button key={cat} onClick={() => setActiveFilter(isActive ? null : cat)} style={{
+              ...btnBase,
+              background: isActive ? color + '33' : 'rgba(255,255,255,0.06)',
+              borderColor: isActive ? color : 'rgba(255,255,255,0.15)',
+              color: isActive ? color : '#94a3b8',
+            }}>
+              <span style={{ width:8, height:8, borderRadius:'50%', background:color, flexShrink:0, display:'inline-block' }}/>
               {cat}
-              <span className="px-1.5 py-0.5 rounded-full text-xs bg-black/20 text-white">{count}</span>
+              <span style={{ background:'rgba(255,255,255,0.15)', borderRadius:10, padding:'1px 6px', fontSize:10 }}>{count}</span>
             </button>
           );
         })}
@@ -315,56 +321,56 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
   // ── Render: input ─────────────────────────────────────────────────────────
   if (stage === 'input') {
     return (
-      <div className="space-y-3">
-        <p className="text-xs text-slate-400">Street number and name — no Rd, St, Ave, or Cove. Type <span className="text-slate-200">Macon</span>, not Macon Road.</p>
-        <div className="flex gap-2">
+      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+        <p style={{ fontSize:11, color:'#64748b' }}>Street number and name — no Rd, St, Ave, or Cove. Type <span style={{color:'#e2e8f0'}}>Macon</span>, not Macon Road.</p>
+        <div style={{ display:'flex', gap:8 }}>
           <input
             type="text"
             placeholder="4128 Weymouth"
             value={address}
             onChange={e => setAddress(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
-            className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:13,
+              background:'rgba(255,255,255,0.06)', border:'1px solid rgba(34,211,238,0.3)',
+              color:'white', outline:'none' }}
           />
-          <button onClick={handleSearch} disabled={loading}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium text-white transition-colors whitespace-nowrap">
+          <button onClick={handleSearch} disabled={loading} style={{
+            padding:'10px 16px', borderRadius:12, fontSize:13, fontWeight:700,
+            color:'white', border:'none', cursor: loading ? 'not-allowed' : 'pointer',
+            background:'linear-gradient(90deg,#22d3ee,#3b82f6)',
+            opacity: loading ? 0.6 : 1, whiteSpace:'nowrap',
+            boxShadow:'0 4px 15px rgba(34,211,238,0.3)',
+          }}>
             {loading ? 'Searching…' : 'Check address'}
           </button>
         </div>
-        {inputStatus && <p className="text-xs text-slate-400">{inputStatus}</p>}
+        {inputStatus && <p style={{ fontSize:11, color:'#64748b' }}>{inputStatus}</p>}
       </div>
     );
   }
 
   // ── Render: map ───────────────────────────────────────────────────────────
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className="text-sm font-medium text-slate-200">{matchedAddr}</span>
-        <div className="flex gap-2">
-          <button onClick={() => setEnlarged(true)} className="text-xs text-slate-400 hover:text-white border border-slate-700 rounded-lg px-3 py-1.5 transition-colors">⛶ Enlarge</button>
-          <button onClick={handleReset} className="text-xs text-slate-400 hover:text-white border border-slate-700 rounded-lg px-3 py-1.5 transition-colors">← New address</button>
+    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+        <span style={{ fontSize:13, fontWeight:600, color:'#e2e8f0' }}>{matchedAddr}</span>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={() => setEnlarged(true)} style={{
+            fontSize:11, color:'#94a3b8', border:'1px solid rgba(255,255,255,0.15)',
+            borderRadius:8, padding:'4px 10px', background:'transparent', cursor:'pointer' }}>⛶ Enlarge</button>
+          <button onClick={handleReset} style={{
+            fontSize:11, color:'#94a3b8', border:'1px solid rgba(255,255,255,0.15)',
+            borderRadius:8, padding:'4px 10px', background:'transparent', cursor:'pointer' }}>← New address</button>
         </div>
       </div>
 
-      {mapStatus && <p className="text-xs text-slate-400">{mapStatus}</p>}
+      {mapStatus && <p style={{ fontSize:11, color:'#64748b' }}>{mapStatus}</p>}
       {categoryCounts.length > 0 && <FilterBar />}
 
-      <div id="ps-map" className="w-full rounded-xl border border-slate-700 overflow-hidden" style={{ height: '360px' }} />
-
-      {categoryCounts.length > 0 && (
-        <div className="flex flex-wrap gap-3 pt-1">
-          {categoryCounts.map(([cat]) => (
-            <span key={cat} className="flex items-center gap-1 text-xs text-slate-400">
-              <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: getColor(cat) }}/>
-              {cat}
-            </span>
-          ))}
-        </div>
-      )}
+      <div id="ps-map" style={{ width:'100%', borderRadius:16, border:'2px solid rgba(34,211,238,0.3)', overflow:'hidden', height:420, minHeight:420 }} />
 
       {enlarged && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950">
+        <div style={{ position:"fixed", inset:0, zIndex:50, display:"flex", flexDirection:"column", background:"#050d1f" }}>
           <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-700 flex-shrink-0">
             <span className="text-sm font-medium text-slate-200">{matchedAddr}</span>
             <button onClick={() => setEnlarged(false)} className="text-xs text-slate-400 hover:text-white border border-slate-700 rounded-lg px-3 py-1.5">✕ Close</button>

@@ -1,11 +1,10 @@
-/**
- * app/layout.tsx
- */
-import type { Metadata } from "next";
+import type { Metadata } from 'next';
+import 'leaflet/dist/leaflet.css';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "SafeCircle",
-  description: "Neighborhood safety · Shelby County, TN",
+  title: 'SafeCircle',
+  description: 'Shelby County public safety — field worker edition',
 };
 
 export default function RootLayout({
@@ -16,11 +15,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <meta name="theme-color" content="#22d3ee" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="SafeCircle" />
+        <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="bg-gray-950 text-gray-100 antialiased">
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
