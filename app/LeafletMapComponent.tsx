@@ -159,7 +159,6 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     let cancelled = false;
     async function init() {
       const L = (await import('leaflet')).default;
-      try { await import('leaflet/dist/leaflet.css'); } catch { }
       LRef.current = L;
       if (cancelled || !geoRef.current) return;
       const { lat, lon } = geoRef.current;
