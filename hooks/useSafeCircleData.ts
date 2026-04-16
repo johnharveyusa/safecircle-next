@@ -1,20 +1,40 @@
-/**
- * hooks/useSafeCircleData.ts
- *
- * React hook that fans out to all four SafeCircle API routes in parallel
- * and provides unified loading / error state to the UI.
- *
- * Usage:
- *   const { data, loading, errors, refresh } = useSafeCircleData(address);
- */
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { CrimeIncident } from "@/app/api/crimes/route";
-import type { SexOffender } from "@/app/api/offenders/route";
-import type { Warrant } from "@/app/api/warrants/route";
-import type { EmergencyContact } from "@/app/api/contacts/route";
+
+export interface CrimeIncident {
+  attributes: {
+    Offense_Datetime: number;
+    UCR_Category: string;
+    UCR_Description: string;
+    Street_Address: string;
+    Latitude: number;
+    Longitude: number;
+    Crime_ID: string;
+    Precinct: string;
+  };
+}
+
+export interface SexOffender {
+  name?: string;
+  address?: string;
+  [key: string]: unknown;
+}
+
+export interface Warrant {
+  name?: string;
+  dob?: string;
+  [key: string]: unknown;
+}
+
+export interface EmergencyContact {
+  name?: string;
+  type?: string;
+  address?: string;
+  phone?: string;
+  distance?: number;
+  [key: string]: unknown;
+}
 
 export interface SafeCircleData {
   crimes: CrimeIncident[];
