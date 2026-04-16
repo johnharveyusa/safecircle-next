@@ -147,7 +147,7 @@ function TrackingMap({ watcherLat, watcherLng, sessions }: {
     let cancelled = false;
     async function init() {
       const L = (await import('leaflet')).default;
-      await import('leaflet/dist/leaflet.css');
+      
       if (cancelled) return;
       LRef.current = L;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
@@ -1454,3 +1454,4 @@ export default function SafeCirclePage() {
     </>
   );
 }
+
