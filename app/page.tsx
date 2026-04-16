@@ -1399,7 +1399,7 @@ export default function SafeCirclePage() {
           <div style={{ textAlign:'center', padding:'16px 0 8px' }}>
             {/* Free forever line */}
             <p style={{ fontSize:12, color:'#22d3ee', fontWeight:700, marginBottom:6, letterSpacing:0.5 }}>
-              🛡 SafeCircle is free forever
+              🛡 SafeCircle is a free service
             </p>
             <p style={{ fontSize:11, color:'#475569', marginBottom:14, lineHeight:1.5 }}>
               Your donation keeps it running and helps us expand to protect more field workers.
