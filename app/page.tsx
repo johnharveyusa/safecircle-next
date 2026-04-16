@@ -955,9 +955,29 @@ function HowToTab({ onShare, shareCopied }: { onShare: () => void; shareCopied: 
   );
 }
 
+type TabId = 'main' | 'tracking' | 'alerts' | 'panic' | 'howto';
+
 export default function SafeCirclePage() {
-  const [activeTab, setActiveTab] = useState<'main' | 'tracking' | 'alerts' | 'panic' | 'howto'>('main');
-  const [showDisclaimer, setShowDisclaimer] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>('main');
+  const [showDisclaimer,   setShowDisclaimer]   = useState(true);
+  const [installPrompt,    setInstallPrompt]    = useState<any>(null);
+  const [showInstallBanner,setShowInstallBanner] = useState(false);
+  const [darkMode,         setDarkMode]         = useState(true);
+
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowInstallBanner(true);
+    });
+  }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const result = await installPrompt.userChoice;
+    if (result.outcome === 'accepted') setShowInstallBanner(false);
+  }
 
   // Address
   const [address,  setAddress]  = useState('');
@@ -1064,15 +1084,83 @@ export default function SafeCirclePage() {
   }
 
   // ── Tab bar ──────────────────────────────────────────────────────────────
-  const tabs = [
+  const tabs: Array<{ id: TabId; label: string; sub: string }> = [
     { id: 'main',     label: '🛡',  sub: 'Safe'    },
     { id: 'tracking', label: '📍',  sub: 'Track'   },
     { id: 'alerts',   label: '🚨',  sub: 'Alerts'  },
     { id: 'panic',    label: '📹',  sub: 'Panic'   },
     { id: 'howto',    label: '❓',  sub: 'How To'  },
-  ] as const;
+  ];
 
   return (
+    <>
+      {/* ── Disclaimer Modal ── */}
+      {showDisclaimer && (
+        <div style={{
+          position:'fixed', inset:0, zIndex:9999,
+          background:'rgba(0,0,0,0.92)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          padding:16,
+        }}>
+          <div style={{
+            background:'linear-gradient(135deg,#0f1f3d,#0a1628)',
+            border:'1px solid rgba(34,211,238,0.4)',
+            borderRadius:24, padding:28, maxWidth:380, width:'100%',
+            boxShadow:'0 0 60px rgba(34,211,238,0.2)',
+          }}>
+            <div style={{ textAlign:'center', marginBottom:16 }}>
+              <div style={{ fontSize:40, marginBottom:8 }}>⚠️</div>
+              <h2 style={{ fontSize:22, fontWeight:900, color:'#22d3ee', margin:0 }}>Disclaimer</h2>
+            </div>
+            <p style={{ fontSize:13, color:'#94a3b8', lineHeight:1.7, marginBottom:20 }}>
+              SafeCircle provides public safety information for <strong style={{color:'#f1f5f9'}}>informational purposes only</strong>.
+              Data is sourced from public records and may not be complete or current.
+              <br /><br />
+              By using SafeCircle you agree that <strong style={{color:'#f1f5f9'}}>U.S. Crime Centers, LLC</strong> is
+              not responsible for any decisions made based on information displayed in this app.
+              <br /><br />
+              <strong style={{color:'#ef4444'}}>Always call 911 in any emergency.</strong>
+            </p>
+            <button onClick={() => setShowDisclaimer(false)} style={{
+              width:'100%', padding:16, borderRadius:14,
+              background:'linear-gradient(90deg,#22d3ee,#3b82f6)',
+              color:'white', fontWeight:900, fontSize:16,
+              border:'none', cursor:'pointer',
+              boxShadow:'0 4px 20px rgba(34,211,238,0.5)',
+            }}>
+              ✓ I Understand — Enter SafeCircle
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── PWA Install Banner ── */}
+      {showInstallBanner && (
+        <div style={{
+          position:'fixed', bottom:20, left:16, right:16, zIndex:9998,
+          background:'linear-gradient(135deg,#0f1f3d,#1a2744)',
+          border:'1px solid rgba(34,211,238,0.4)',
+          borderRadius:16, padding:'14px 16px',
+          display:'flex', alignItems:'center', gap:12,
+          boxShadow:'0 8px 32px rgba(0,0,0,0.5)',
+        }}>
+          <div style={{ fontSize:32 }}>🛡</div>
+          <div style={{ flex:1 }}>
+            <p style={{ fontSize:13, fontWeight:700, color:'white', margin:0 }}>Add SafeCircle to your home screen</p>
+            <p style={{ fontSize:11, color:'#64748b', margin:0 }}>Tap to install as an app</p>
+          </div>
+          <button onClick={handleInstall} style={{
+            padding:'8px 16px', borderRadius:10, border:'none',
+            background:'linear-gradient(90deg,#22d3ee,#3b82f6)',
+            color:'white', fontWeight:700, fontSize:12, cursor:'pointer',
+          }}>Install</button>
+          <button onClick={() => setShowInstallBanner(false)} style={{
+            padding:'8px', borderRadius:10, border:'none',
+            background:'transparent', color:'#475569', fontSize:16, cursor:'pointer',
+          }}>✕</button>
+        </div>
+      )}
+
     <div style={{
       minHeight:'100vh',
       background:'linear-gradient(160deg,#050d1f 0%,#0a1628 50%,#050d1f 100%)',
@@ -1088,11 +1176,11 @@ export default function SafeCirclePage() {
         padding:'12px 16px 0',
       }}>
         <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-          <button onClick={() => setDarkMode && setDarkMode((d:boolean) => !d)}
+          <button onClick={() => setDarkMode((d:boolean) => !d)}
             style={{ padding:'8px 10px', borderRadius:10, fontSize:16,
               background:'rgba(34,211,238,0.1)', border:'1px solid rgba(34,211,238,0.3)',
               cursor:'pointer', marginRight:4, color:'#f1f5f9' }}>
-            ☀️
+            {darkMode ? '☀️' : '🌙'}
           </button>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
@@ -1309,6 +1397,13 @@ export default function SafeCirclePage() {
 
           {/* Footer */}
           <div style={{ textAlign:'center', padding:'16px 0 8px' }}>
+            {/* Free forever line */}
+            <p style={{ fontSize:12, color:'#22d3ee', fontWeight:700, marginBottom:6, letterSpacing:0.5 }}>
+              🛡 SafeCircle is free forever
+            </p>
+            <p style={{ fontSize:11, color:'#475569', marginBottom:14, lineHeight:1.5 }}>
+              Your donation keeps it running and helps us expand to protect more field workers.
+            </p>
             {/* PayPal Donate Button */}
             <a href="https://www.paypal.com/donate/?hosted_button_id=59GEQMLVVE68S"
               target="_blank" rel="noopener noreferrer"
@@ -1317,13 +1412,17 @@ export default function SafeCirclePage() {
                 background:'linear-gradient(90deg,#0070ba,#003087)',
                 color:'white', fontWeight:700, fontSize:14, textDecoration:'none',
                 boxShadow:'0 4px 20px rgba(0,112,186,0.5)',
-                marginBottom:12,
+                marginBottom:10,
               }}>
               💙 Donate via PayPal / Venmo
             </a>
             <br />
+            <p style={{ fontSize:11, color:'#475569', margin:'8px 0 6px' }}>
+              Support <a href={USC_URL} target="_blank" rel="noopener noreferrer"
+                style={{ color:'#22d3ee', textDecoration:'none', fontWeight:700 }}>USCrimeCenters</a> — help keep people safe.
+            </p>
             <a href={USC_URL} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize:11, color:'#334155', textDecoration:'none' }}>
+              style={{ fontSize:10, color:'#334155', textDecoration:'none' }}>
               Powered by U.S. Crime Centers
             </a>
           </div>
@@ -1352,5 +1451,6 @@ export default function SafeCirclePage() {
 
       </main>
     </div>
+    </>
   );
 }

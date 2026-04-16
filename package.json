@@ -10,12 +10,14 @@
   },
   "dependencies": {
     "leaflet": "1.9.4",
-    "next": "15.3.8",
+    "next": "^14.2.29",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-leaflet": "4.2.1"
   },
   "devDependencies": {
+    "@babel/plugin-transform-runtime": "^7.29.0",
+    "@babel/runtime": "^7.29.2",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/leaflet": "^1.9.14",
     "@types/node": "^20",
