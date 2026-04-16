@@ -1,7 +1,12 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { MPD_QUERY_URL, RADIUS_MILES, WINDOW_DAYS, metersFromMiles, fmtDate, ucrColor } from '@/lib/config'
-import type { GeoResult } from './AddressBar'
+
+export interface GeoResult {
+  lat: number
+  lon: number
+  matched?: string
+}
 
 interface Incident {
   attributes: {
@@ -60,7 +65,6 @@ export default function CrimePanel({ geo }: Props) {
     }
   }
 
-  // Build/update Leaflet map
   useEffect(() => {
     if (!showMap || !mapRef.current || !geo) return
     let isMounted = true
@@ -68,7 +72,6 @@ export default function CrimePanel({ geo }: Props) {
     async function buildMap() {
       if (!geo) return
       const L = (await import('leaflet')).default
-      // Fix default icon path for Next.js
       // @ts-ignore
       delete L.Icon.Default.prototype._getIconUrl
       L.Icon.Default.mergeOptions({
@@ -93,15 +96,12 @@ export default function CrimePanel({ geo }: Props) {
 
       const layer = L.layerGroup().addTo(map)
 
-      // Center marker
       L.circleMarker([geo.lat, geo.lon], { radius: 10, color: '#2563EB', fillColor: '#2563EB', fillOpacity: 1 })
         .addTo(layer)
         .bindPopup(`<b>📍 ${geo.matched?.split(',')[0]}</b>`)
 
-      // Radius circle
       L.circle([geo.lat, geo.lon], { radius: metersFromMiles(RADIUS_MILES), color: '#2563EB', weight: 1.5, fillOpacity: 0.05 }).addTo(layer)
 
-      // Incident markers
       const bounds = L.latLngBounds([[geo.lat, geo.lon]])
       for (const f of incidents) {
         const a = f.attributes
@@ -122,7 +122,6 @@ export default function CrimePanel({ geo }: Props) {
     return () => { isMounted = false }
   }, [showMap, incidents, geo])
 
-  // cleanup on unmount
   useEffect(() => () => { leafletMap.current?.remove() }, [])
 
   if (!geo) return null
@@ -158,7 +157,6 @@ export default function CrimePanel({ geo }: Props) {
 
       {loaded && (
         <>
-          {/* UCR legend */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
             {Object.entries({ HOMICIDE: '#DC2626', ROBBERY: '#EA580C', BURGLARY: '#2563EB', THEFT: '#16A34A', ASSAULT: '#CA8A04', DRUGS: '#7C3AED', OTHER: '#64748B' }).map(([k, v]) => (
               <span key={k} style={{ background: v + '18', color: v, border: `1px solid ${v}40`, borderRadius: 6, fontSize: 11, padding: '2px 8px', fontWeight: 700 }}>{k}</span>
