@@ -20,10 +20,13 @@ function splitAddress(raw: string) {
   const parts = raw.trim().split(/\s+/);
   return { num: parts[0] || '', name: parts.slice(1).join(' ') };
 }
-function warrantUrl(raw: string) {
-  const { num, name } = splitAddress(raw);
-  const st = name.split(/\s+/)[0];
-  return `https://warrants.shelby-sheriff.org/w_warrant_result.php?w=&l=&f=&s=${encodeURIComponent(num)}&st=${encodeURIComponent(st)}`;
+function warrantUrl(raw: string, city: CityConfig) {
+  if (city.id === 'memphis') {
+    const { num, name } = splitAddress(raw);
+    const st = name.split(/\s+/)[0];
+    return `https://warrants.shelby-sheriff.org/w_warrant_result.php?w=&l=&f=&s=${encodeURIComponent(num)}&st=${encodeURIComponent(st)}`;
+  }
+  return city.warrantUrl;
 }
 function offenderUrl(raw: string) {
   return `https://www.nsopw.gov/en/Search/Results?street=${encodeURIComponent(raw.trim() + ', Memphis, TN')}`;
@@ -33,7 +36,7 @@ function directionsUrl(destination: string) {
 }
 async function geocodeAddress(raw: string) {
   try {
-    const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(raw + ', Memphis, TN')}&maxLocations=1&outFields=*&f=pjson`;
+    const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(raw + ', ' + selectedCity.geocodeSuffix)}&maxLocations=1&outFields=*&f=pjson`;
     const r = await fetch(url);
     const j = await r.json();
     if (!j.candidates?.length) return null;
@@ -55,21 +58,39 @@ function Section({ title, children, defaultOpen = false, dark = true }: { title:
   return (
     <div style={{
       borderRadius:20,
-      border: dark ? '1px solid rgba(34,211,238,0.18)' : '1px solid #bfdbfe',
+      border: open ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(168,85,247,0.3)',
       background: dark ? 'linear-gradient(135deg,#0f1f3d,#0a1628)' : 'white',
-      overflow:'hidden',
-      boxShadow: dark ? '0 4px 24px rgba(0,0,0,0.35)' : '0 2px 12px rgba(37,99,235,0.08)',
+      overflow:'visible',
+      boxShadow: open ? '0 4px 24px rgba(34,211,238,0.12)' : '0 4px 24px rgba(0,0,0,0.35)',
     }}>
-      <button onClick={() => setOpen(o => !o)} style={{
-        width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
-        padding:'14px 16px', background:'transparent', border:'none', cursor:'pointer', textAlign:'left',
-      }}>
-        <span style={{ fontSize:14, fontWeight:700, color: dark ? '#f1f5f9' : '#1e3a5f' }}>{title}</span>
-        <span style={{ fontSize:20, fontWeight:700, color: open ? '#22d3ee' : '#475569', lineHeight:1 }}>{open ? '−' : '+'}</span>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+          padding:'16px 16px', background: open ? 'rgba(34,211,238,0.06)' : 'transparent',
+          border:'none', cursor:'pointer', textAlign:'left',
+          minHeight:56,
+          touchAction:'manipulation',
+          WebkitTapHighlightColor:'transparent',
+          borderRadius: open ? '20px 20px 0 0' : 20,
+        }}
+      >
+        <span style={{ fontSize:14, fontWeight:700, color: dark ? '#f1f5f9' : '#1e3a5f', flex:1, paddingRight:12 }}>{title}</span>
+        <span style={{
+          display:'inline-flex', alignItems:'center', justifyContent:'center',
+          width:40, height:40, borderRadius:'50%',
+          background: open
+            ? 'linear-gradient(135deg,#22d3ee,#3b82f6)'
+            : 'linear-gradient(135deg,#a855f7,#7c3aed)',
+          color:'white', fontSize:24, fontWeight:900, lineHeight:1,
+          boxShadow: open ? '0 0 12px rgba(34,211,238,0.5)' : '0 0 12px rgba(168,85,247,0.5)',
+          flexShrink:0,
+          userSelect:'none',
+        }}>{open ? '−' : '+'}</span>
       </button>
       {open && <div style={{
         padding:'8px 16px 16px',
-        borderTop: dark ? '1px solid rgba(34,211,238,0.12)' : '1px solid #bfdbfe',
+        borderTop: '1px solid rgba(34,211,238,0.15)',
       }}>{children}</div>}
     </div>
   );
@@ -230,6 +251,9 @@ function TrackingTab({ contacts }: { contacts: Contact[] }) {
   const [watcherLng,  setWatcherLng]  = useState<number | null>(null);
   const [locStatus,   setLocStatus]   = useState<'idle' | 'active' | 'denied'>('idle');
 
+  const [smsPhone,    setSmsPhone]    = useState('');
+  const [showSmsInput,setShowSmsInput] = useState(false);
+
   const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const watchRef   = useRef<number | null>(null);
 
@@ -276,7 +300,10 @@ function TrackingTab({ contacts }: { contacts: Contact[] }) {
   }
 
   function smsLink() {
-    window.open(`sms:?body=${encodeURIComponent('SafeCircle is requesting a location check-in for your visit. Tap to share your location (session only — stops when you close the page): ' + shareLink)}`);
+    const body = encodeURIComponent('SafeCircle is requesting a location check-in for your visit. Tap to share your location (session only — stops when you close the page): ' + shareLink);
+    const num = smsPhone.replace(/\D/g, '');
+    window.open(`sms:${num}?body=${body}`);
+    setShowSmsInput(false);
   }
 
   // Google directions from watcher to a tracked person
@@ -313,23 +340,28 @@ function TrackingTab({ contacts }: { contacts: Contact[] }) {
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
       {/* ── My location toggle ── */}
-      <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 space-y-2">
-        <div className="flex items-center justify-between">
+      <div style={{ borderRadius:20, border:'1px solid rgba(34,211,238,0.18)', background:'linear-gradient(135deg,#0f1f3d,#0a1628)', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.35)' }}>
+        <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(34,211,238,0.10)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
-            <p className="text-sm font-semibold text-slate-200">🔵 My Location</p>
-            <p style={{ fontSize:11, color:"#475569" }}>Show your position on the map below</p>
+            <p style={{ fontSize:14, fontWeight:700, color:'#f1f5f9', margin:0 }}>🔵 My Location</p>
+            <p style={{ fontSize:11, color:'#475569', margin:0 }}>Show your position on the live map</p>
           </div>
           {locStatus === 'active'
-            ? <button onClick={stopMyLocation} className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:text-white transition-colors">Stop</button>
-            : <button onClick={startMyLocation} className="text-xs px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-white font-medium transition-colors">Enable</button>
+            ? <button onClick={stopMyLocation} style={{ fontSize:11, padding:'6px 14px', borderRadius:10, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', color:'#94a3b8', cursor:'pointer' }}>Stop</button>
+            : <button onClick={startMyLocation} style={{ fontSize:11, padding:'6px 14px', borderRadius:10, background:'linear-gradient(90deg,#22d3ee,#2563eb)', border:'none', color:'#0a1628', fontWeight:700, cursor:'pointer' }}>Enable</button>
           }
         </div>
-        {locStatus === 'active' && watcherLat && (
-          <p className="text-xs text-blue-400">📍 Tracking your position · {watcherLat.toFixed(5)}, {watcherLng?.toFixed(5)}</p>
-        )}
-        {locStatus === 'denied' && (
-          <p style={{ fontSize:11, color:"#f87171" }}>Location access denied — enable it in browser settings.</p>
-        )}
+        <div style={{ padding:'10px 16px' }}>
+          {locStatus === 'active' && watcherLat && (
+            <p style={{ fontSize:11, color:'#22d3ee', margin:0 }}>📍 Tracking your position · {watcherLat.toFixed(5)}, {watcherLng?.toFixed(5)}</p>
+          )}
+          {locStatus === 'denied' && (
+            <p style={{ fontSize:11, color:'#f87171', margin:0 }}>Location access denied — enable it in browser settings.</p>
+          )}
+          {locStatus === 'idle' && (
+            <p style={{ fontSize:11, color:'#475569', margin:0 }}>Tap Enable to show your position on the map.</p>
+          )}
+        </div>
       </div>
 
       {/* ── Live tracking map ── */}
@@ -338,78 +370,110 @@ function TrackingTab({ contacts }: { contacts: Contact[] }) {
       )}
 
       {/* ── Share link panel ── */}
-      <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-4 space-y-3">
-        <div className="flex items-center justify-between">
+      <div style={{ borderRadius:20, border:'1px solid rgba(34,211,238,0.18)', background:'linear-gradient(135deg,#0f1f3d,#0a1628)', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.35)' }}>
+        <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(34,211,238,0.10)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
-            <p className="text-sm font-semibold text-slate-200">📍 Track a Field Worker</p>
-            <p className="text-xs text-slate-500 mt-0.5">Session only · never stored · opt-in always</p>
+            <p style={{ fontSize:14, fontWeight:700, color:'#f1f5f9', margin:0 }}>📍 Track a Field Worker</p>
+            <p style={{ fontSize:11, color:'#475569', margin:0 }}>Session only · never stored · opt-in always</p>
           </div>
-          <div className={`w-3 h-3 rounded-full ${trackingOn ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
+          <div style={{ width:10, height:10, borderRadius:'50%', background: trackingOn ? '#10b981' : '#334155', boxShadow: trackingOn ? '0 0 8px #10b981' : 'none' }} />
         </div>
-
+        <div style={{ padding:'12px 16px' }}>
         {!trackingOn ? (
           <button onClick={generateLink}
-            className="w-full py-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-sm transition-colors">
+            style={{ width:'100%', padding:13, borderRadius:14, background:'linear-gradient(90deg,#10b981,#059669)', border:'none', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             📍 Generate Check-In Link
           </button>
         ) : (
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-            <div className="rounded-xl bg-slate-800 border border-slate-700 px-3 py-2">
-              <p className="text-xs text-slate-400 mb-1">Share this link — they tap it, location sharing is their choice:</p>
-              <p className="text-xs text-emerald-400 font-mono break-all">{shareLink}</p>
+            <div style={{ background:'rgba(34,211,238,0.06)', border:'1px solid rgba(34,211,238,0.2)', borderRadius:10, padding:'10px 12px' }}>
+              <p style={{ fontSize:10, color:'#64748b', margin:'0 0 4px' }}>Share this link — they tap it, location sharing is their choice:</p>
+              <p style={{ fontSize:11, color:'#22d3ee', fontFamily:'monospace', wordBreak:'break-all', margin:0 }}>{shareLink}</p>
             </div>
             <div style={{ display:"flex", gap:8 }}>
               <button onClick={copyLink}
-                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${copied ? 'bg-emerald-700 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'}`}>
+                style={{ flex:1, padding:'9px', borderRadius:10, border:'none', fontWeight:700, fontSize:11, cursor:'pointer', background: copied ? 'linear-gradient(90deg,#10b981,#059669)' : 'rgba(255,255,255,0.05)', color: copied ? 'white' : '#94a3b8', border: copied ? 'none' : '1px solid rgba(34,211,238,0.2)' }}>
                 {copied ? '✓ Copied!' : 'Copy Link'}
               </button>
-              <button onClick={smsLink}
-                className="flex-1 py-2 rounded-lg bg-blue-800 hover:bg-blue-700 text-xs font-medium text-white transition-colors">
-                Send via SMS
+              <button onClick={() => setShowSmsInput(s => !s)}
+                style={{ flex:1, padding:'9px', borderRadius:10, background: showSmsInput ? 'linear-gradient(90deg,#a855f7,#7c3aed)' : 'linear-gradient(90deg,#2563eb,#1d4ed8)', border:'none', color:'white', fontWeight:700, fontSize:11, cursor:'pointer' }}>
+                📱 Send SMS
               </button>
               <button onClick={stopAll}
-                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-rose-900/40 text-xs text-rose-400 transition-colors">
+                style={{ padding:'9px 12px', borderRadius:10, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(239,68,68,0.3)', color:'#f87171', fontSize:11, cursor:'pointer' }}>
                 Stop
               </button>
             </div>
+
+            {/* Phone number input — slides in when Send SMS tapped */}
+            {showSmsInput && (
+              <div style={{ background:'rgba(168,85,247,0.08)', border:'1px solid rgba(168,85,247,0.3)', borderRadius:12, padding:'12px 14px', display:'flex', flexDirection:'column', gap:10 }}>
+                <p style={{ fontSize:11, color:'#c4b5fd', fontWeight:600, margin:0 }}>📱 Enter the worker's phone number</p>
+                <div style={{ display:'flex', gap:8 }}>
+                  <input
+                    type="tel"
+                    placeholder="901-555-1234"
+                    value={smsPhone}
+                    onChange={e => setSmsPhone(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && smsPhone.trim()) smsLink(); }}
+                    style={{ flex:1, padding:'10px 12px', borderRadius:10, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(168,85,247,0.4)', color:'white', fontSize:13, outline:'none' }}
+                    autoFocus
+                  />
+                  <button onClick={smsLink} disabled={!smsPhone.trim()}
+                    style={{ padding:'10px 16px', borderRadius:10, background: smsPhone.trim() ? 'linear-gradient(90deg,#a855f7,#7c3aed)' : 'rgba(255,255,255,0.05)', border:'none', color: smsPhone.trim() ? 'white' : '#475569', fontWeight:700, fontSize:12, cursor: smsPhone.trim() ? 'pointer' : 'not-allowed', whiteSpace:'nowrap' }}>
+                    Send ➤
+                  </button>
+                </div>
+                <p style={{ fontSize:10, color:'#64748b', margin:0 }}>Opens your SMS app with the check-in link pre-filled.</p>
+              </div>
+            )}
           </div>
         )}
+        </div>
       </div>
 
       {/* ── Active check-ins ── */}
       {trackingOn && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 space-y-2">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Active Check-Ins</p>
+        <div style={{ borderRadius:20, border:'1px solid rgba(34,211,238,0.18)', background:'linear-gradient(135deg,#0f1f3d,#0a1628)', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.35)' }}>
+          <div style={{ padding:'10px 16px', borderBottom:'1px solid rgba(34,211,238,0.10)' }}>
+            <p style={{ fontSize:11, fontWeight:700, color:'#22d3ee', letterSpacing:1, textTransform:'uppercase', margin:0 }}>Active Check-Ins</p>
+          </div>
+          <div style={{ padding:'8px 16px' }}>
           {sessions.length === 0 ? (
-            <p className="text-xs text-slate-600">No one is sharing yet — waiting for them to open the link.</p>
+            <p style={{ fontSize:12, color:'#475569', margin:'8px 0' }}>No one is sharing yet — waiting for them to open the link.</p>
           ) : (
             sessions.map(s => (
-              <div key={s.id} className="flex items-center justify-between py-2 border-b border-slate-800 last:border-0 gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-200">📍 {s.name}</p>
-                  <p style={{ fontSize:11, color:"#475569" }}>Updated {Math.round((Date.now() - s.updatedAt) / 1000)}s ago</p>
+              <div key={s.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(34,211,238,0.08)' }}>
+                <div>
+                  <p style={{ fontSize:13, fontWeight:700, color:'#f1f5f9', margin:0 }}>📍 {s.name}</p>
+                  <p style={{ fontSize:11, color:'#475569', margin:0 }}>Updated {Math.round((Date.now() - s.updatedAt) / 1000)}s ago</p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ width:8, height:8, borderRadius:'50%', background:'#10b981', display:'inline-block', boxShadow:'0 0 6px #10b981' }} />
                   <button onClick={() => directionsTo(s)}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-blue-800 hover:bg-blue-700 text-white font-medium transition-colors whitespace-nowrap">
+                    style={{ fontSize:11, padding:'6px 12px', borderRadius:10, background:'linear-gradient(90deg,#2563eb,#1d4ed8)', border:'none', color:'white', fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
                     🗺 Directions
                   </button>
                 </div>
               </div>
             ))
           )}
+          </div>
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 space-y-1.5 text-xs text-slate-500">
-        <p className="font-medium text-slate-400">How it works</p>
-        <p>1. Enable My Location — your blue dot appears on the map</p>
-        <p>2. Tap Generate — a unique link is created for your worker</p>
-        <p>3. Send via SMS — they tap it and choose whether to share</p>
-        <p>4. Their orange dot appears on the map in real time</p>
-        <p>5. Tap Directions to get Google turn-by-turn to their location</p>
-        <p>6. Everything stops the moment they close their page</p>
+      <div style={{ background:'rgba(34,211,238,0.04)', border:'1px solid rgba(34,211,238,0.12)', borderRadius:16, padding:'12px 16px' }}>
+        <p style={{ fontSize:11, fontWeight:700, color:'#22d3ee', letterSpacing:1, textTransform:'uppercase', margin:'0 0 8px' }}>How it works</p>
+        {[
+          '1. Enable My Location — your blue dot appears on the map',
+          '2. Tap Generate — a unique link is created for your worker',
+          '3. Send via SMS — they tap it and choose whether to share',
+          '4. Their orange dot appears on the map in real time',
+          '5. Tap Directions to get Google turn-by-turn to their location',
+          '6. Everything stops the moment they close their page',
+        ].map(step => (
+          <p key={step} style={{ fontSize:11, color:'#64748b', margin:'3px 0' }}>{step}</p>
+        ))}
       </div>
     </div>
   );
@@ -612,12 +676,12 @@ function AlertsTab({ contacts, address }: { contacts: Contact[]; address: string
   // ── DONE SCREEN ────────────────────────────────────────────────────────────
   if (phase === 'done') {
     return (
-      <div className="space-y-4 text-center py-8">
-        <p className="text-5xl">✅</p>
-        <p className="text-xl font-semibold text-emerald-400">Visit Complete</p>
-        <p className="text-sm text-slate-400">You're safe. Check-in closed.</p>
+      <div style={{ textAlign:'center', padding:'32px 0' }}>
+        <p style={{ fontSize:48, margin:'0 0 12px' }}>✅</p>
+        <p style={{ fontSize:20, fontWeight:700, color:'#10b981', margin:'0 0 6px' }}>Visit Complete</p>
+        <p style={{ fontSize:13, color:'#475569', margin:'0 0 20px' }}>You're safe. Check-in closed.</p>
         <button onClick={handleReset}
-          className="px-6 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">
+          style={{ padding:'10px 28px', borderRadius:12, background:'linear-gradient(90deg,#22d3ee,#2563eb)', border:'none', color:'#0a1628', fontWeight:700, fontSize:13, cursor:'pointer' }}>
           Start New Check-In
         </button>
       </div>
@@ -628,54 +692,62 @@ function AlertsTab({ contacts, address }: { contacts: Contact[]; address: string
   if (phase === 'idle') {
     return (
       <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-        <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-4 space-y-4">
-          <div>
-            <p className="text-sm font-semibold text-slate-200">🛡 Safety Check-In</p>
-            {address && <p className="text-xs text-slate-500 mt-0.5">📍 {address}, Memphis TN</p>}
-          </div>
-
-          {/* Timer selection */}
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            <p className="text-xs text-slate-400 font-medium">Set your check-in interval</p>
+      <div style={{ borderRadius:20, border:'1px solid rgba(34,211,238,0.18)', background:'linear-gradient(135deg,#0f1f3d,#0a1628)', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.35)' }}>
+        <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(34,211,238,0.10)' }}>
+          <p style={{ fontSize:14, fontWeight:700, color:'#f1f5f9', margin:0 }}>🛡 Safety Check-In</p>
+          {address && <p style={{ fontSize:11, color:'#475569', margin:0 }}>📍 {address}, Memphis TN</p>}
+        </div>
+        <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:14 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            <p style={{ fontSize:11, fontWeight:700, color:'#22d3ee', margin:0 }}>Set your check-in interval</p>
             <div className="flex flex-wrap gap-2">
               {TIMER_PRESETS.map(m => (
                 <button key={m} onClick={() => { setIntervalMin(m); setCustomMin(''); }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${effectiveMin === m && !customMin ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
+                  style={{ padding:'7px 12px', borderRadius:10, fontSize:11, fontWeight:700, cursor:'pointer',
+                    background: effectiveMin === m && !customMin ? 'linear-gradient(90deg,#22d3ee,#2563eb)' : 'rgba(255,255,255,0.05)',
+                    color: effectiveMin === m && !customMin ? '#0a1628' : '#94a3b8',
+                    border: effectiveMin === m && !customMin ? 'none' : '1px solid rgba(34,211,238,0.15)',
+                  }}>
                   {m} min
                 </button>
               ))}
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
               <input type="number" min="1" max="480" placeholder="Custom min"
                 value={customMin} onChange={e => setCustomMin(e.target.value)}
-                className="w-28 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500" />
-              <span style={{ fontSize:11, color:"#475569" }}>minutes</span>
+                style={{ width:110, padding:'8px 12px', borderRadius:10, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', color:'#f1f5f9', fontSize:12, outline:'none' }} />
+              <span style={{ fontSize:11, color:'#475569' }}>minutes</span>
             </div>
-            <p className="text-xs text-slate-600">
+            <p style={{ fontSize:11, color:'#475569', margin:0 }}>
               ⚠ If you don't check in within {effectiveMin} min, an alert fires automatically.
             </p>
           </div>
 
           {contacts.length === 0 && (
-            <p className="text-xs text-amber-500 bg-amber-900/20 rounded-lg px-3 py-2">
+            <p style={{ fontSize:11, color:'#f59e0b', background:'rgba(245,158,11,0.1)', border:'1px solid rgba(245,158,11,0.25)', borderRadius:10, padding:'8px 12px', margin:0 }}>
               ⚠ No circle contacts yet — add them on the SafeCircle tab so alerts can be sent.
             </p>
           )}
 
           <button onClick={handleArrival}
-            className="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-base font-bold transition-colors">
+            style={{ width:'100%', padding:16, borderRadius:14, background:'linear-gradient(90deg,#10b981,#059669)', border:'none', color:'white', fontSize:15, fontWeight:900, cursor:'pointer', boxShadow:'0 4px 20px rgba(16,185,129,0.4)' }}>
             ▶ I've Arrived — Start Check-In
           </button>
         </div>
+      </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 space-y-1.5 text-xs text-slate-500">
-          <p className="font-medium text-slate-400">How it works</p>
-          <p>1. Set your interval and tap Arrived</p>
-          <p>2. Timer counts down — if it hits zero, alert fires automatically</p>
-          <p>3. Tap ✅ I'm OK before it expires to stop the timer</p>
-          <p>4. A 10-min departure timer starts — tap safe when you're back at your car</p>
-          <p>5. 🚨 I Need Help sends an immediate blast to your circle + calls 911</p>
-        </div>
+      <div style={{ background:'rgba(34,211,238,0.04)', border:'1px solid rgba(34,211,238,0.12)', borderRadius:16, padding:'12px 16px' }}>
+        <p style={{ fontSize:11, fontWeight:700, color:'#22d3ee', letterSpacing:1, textTransform:'uppercase', margin:'0 0 8px' }}>How it works</p>
+        {[
+          '1. Set your interval and tap Arrived',
+          '2. Timer counts down — if it hits zero, alert fires automatically',
+          '3. Tap ✅ I\'m OK before it expires to stop the timer',
+          '4. A 10-min departure timer starts — tap safe when you\'re back at your car',
+          '5. 🚨 I Need Help sends an immediate blast to your circle + calls 911',
+        ].map(step => (
+          <p key={step} style={{ fontSize:11, color:'#64748b', margin:'3px 0' }}>{step}</p>
+        ))}
+      </div>
       </div>
     );
   }
@@ -684,7 +756,7 @@ function AlertsTab({ contacts, address }: { contacts: Contact[]; address: string
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
       {/* Timer display */}
-      <div className={`rounded-2xl border px-4 py-5 text-center space-y-3 ${phase === 'departure' ? 'border-blue-700 bg-blue-950/40' : 'border-slate-700 bg-slate-900'}`}>
+      <div style={{ borderRadius:20, border: phase === 'departure' ? '1px solid rgba(37,99,235,0.4)' : '1px solid rgba(34,211,238,0.18)', background: phase === 'departure' ? 'linear-gradient(135deg,#0c1e3d,#071428)' : 'linear-gradient(135deg,#0f1f3d,#0a1628)', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.35)', textAlign:'center', padding:'20px 16px' }}>
         <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
           {phase === 'departure' ? '🚶 Departure timer — get to your car' : '⏱ Visit check-in timer'}
         </p>
@@ -957,6 +1029,464 @@ function HowToTab({ onShare, shareCopied }: { onShare: () => void; shareCopied: 
 
 type TabId = 'main' | 'tracking' | 'alerts' | 'panic' | 'howto';
 
+
+// ── City config type ──────────────────────────────────────────────────────────
+
+export interface CityConfig {
+  id: string;
+  name: string;
+  state: string;
+  country: string;
+  lat: number;
+  lng: number;
+  zoom: number;
+  geocodeSuffix: string;        // appended to address for geocoding, e.g. "Memphis, TN"
+  esriLayer: string;            // FeatureServer URL or 'socrata' or 'uk-police' etc.
+  crimeField: string;           // field name for crime type
+  updateFreq: string;
+  apiStatus: '✅' | '~' | '🔧';
+  warrantUrl: string;           // county sheriff warrant search URL
+  jailUrl: string;              // jail roster URL
+  warrantNote?: string;
+  jailNote?: string;
+  placeholderAddress: string;   // example address for input placeholder
+}
+
+// ── City configs ──────────────────────────────────────────────────────────────
+
+export const CITY_CONFIGS: CityConfig[] = [
+  // ── United States ──────────────────────────────────────────────────────────
+  { id:'memphis',       name:'Memphis',        state:'TN', country:'US',
+    lat:35.1495, lng:-90.0490, zoom:13, geocodeSuffix:'Memphis, TN',
+    esriLayer:'https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0',
+    crimeField:'UCR_Category', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://warrants.shelby-sheriff.org/w_warrant_result.php',
+    jailUrl:'https://imljail.shelbycountytn.gov/IML',
+    placeholderAddress:'4128 Weymouth' },
+  { id:'denver',        name:'Denver',         state:'CO', country:'US',
+    lat:39.7392, lng:-104.9903, zoom:13, geocodeSuffix:'Denver, CO',
+    esriLayer:'https://services1.arcgis.com/geospatialDenver/arcgis/rest/services/Crime/FeatureServer/0',
+    crimeField:'offense_type_id', updateFreq:'Mon–Fri', apiStatus:'✅',
+    warrantUrl:'https://www.denvercountycourt.org/records/',
+    jailUrl:'https://www.denvergov.org/Government/Agencies-Departments-Offices/Agencies-Departments-Offices-Directory/Sheriff-Department/Inmate-Search',
+    warrantNote:'Denver County Court — web search',
+    placeholderAddress:'1600 Broadway' },
+  { id:'neworleans',    name:'New Orleans',    state:'LA', country:'US',
+    lat:29.9511, lng:-90.0715, zoom:13, geocodeSuffix:'New Orleans, LA',
+    esriLayer:'https://services3.arcgis.com/dty2kHktVXHrqO8i/arcgis/rest/services/Crime_Incidents/FeatureServer/0',
+    crimeField:'TypeText', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.opcso.org/index.php?page=warrant_search',
+    jailUrl:'https://opso.us/inmate-search/',
+    placeholderAddress:'900 Bourbon St' },
+  { id:'chicago',       name:'Chicago',        state:'IL', country:'US',
+    lat:41.8781, lng:-87.6298, zoom:13, geocodeSuffix:'Chicago, IL',
+    esriLayer:'socrata:data.cityofchicago.org/ijzp-q8t2',
+    crimeField:'primary_type', updateFreq:'Daily', apiStatus:'~',
+    warrantUrl:'https://publicsearch1.chicagopolice.org/',
+    jailUrl:'https://iic.ccsheriff.org/',
+    placeholderAddress:'233 S Wacker Dr' },
+  { id:'dc',            name:'Washington DC',  state:'DC', country:'US',
+    lat:38.9072, lng:-77.0369, zoom:13, geocodeSuffix:'Washington, DC',
+    esriLayer:'https://maps2.dcgis.dc.gov/dcgis/rest/services/FEEDS/MPD/MapServer/8',
+    crimeField:'OFFENSE', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.dccourts.gov/superior-court/criminal-division',
+    jailUrl:'https://doc.dc.gov/page/inmate-locator',
+    placeholderAddress:'1600 Pennsylvania Ave' },
+  { id:'losangeles',    name:'Los Angeles',    state:'CA', country:'US',
+    lat:34.0522, lng:-118.2437, zoom:13, geocodeSuffix:'Los Angeles, CA',
+    esriLayer:'https://data.lacity.org/resource/2nrs-mtv8.json',
+    crimeField:'Crm Cd Desc', updateFreq:'Daily', apiStatus:'~',
+    warrantUrl:'https://www.lasd.org/transparency/arrdivisions.html',
+    jailUrl:'https://app5.lasd.org/iic/',
+    placeholderAddress:'6801 Hollywood Blvd' },
+  { id:'houston',       name:'Houston',        state:'TX', country:'US',
+    lat:29.7604, lng:-95.3698, zoom:13, geocodeSuffix:'Houston, TX',
+    esriLayer:'socrata:www.houstontx.gov',
+    crimeField:'Offense Type', updateFreq:'Daily', apiStatus:'~',
+    warrantUrl:'https://www.hcso.hctx.net/warrant/',
+    jailUrl:'https://www.hcso.hctx.net/jailinfo/',
+    placeholderAddress:'1001 Avenida de las Americas' },
+  { id:'phoenix',       name:'Phoenix',        state:'AZ', country:'US',
+    lat:33.4484, lng:-112.0740, zoom:13, geocodeSuffix:'Phoenix, AZ',
+    esriLayer:'https://maps.phoenix.gov/arcgis/rest/services/PHX_Crime/FeatureServer/0',
+    crimeField:'UCR_CRIME_CATEGORY', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.maricopa.gov/5593/Warrant-Search',
+    jailUrl:'https://www.mcso.org/Jail/InmateSearch',
+    placeholderAddress:'200 W Washington St' },
+  { id:'philadelphia',  name:'Philadelphia',   state:'PA', country:'US',
+    lat:39.9526, lng:-75.1652, zoom:13, geocodeSuffix:'Philadelphia, PA',
+    esriLayer:'socrata:www.opendataphilly.org',
+    crimeField:'text_general_code', updateFreq:'Daily', apiStatus:'~',
+    warrantUrl:'https://ujsportal.pacourts.us/',
+    jailUrl:'https://www.phila.gov/departments/philadelphia-department-of-prisons/',
+    placeholderAddress:'1 Penn Sq' },
+  { id:'sanantonio',    name:'San Antonio',    state:'TX', country:'US',
+    lat:29.4241, lng:-98.4936, zoom:13, geocodeSuffix:'San Antonio, TX',
+    esriLayer:'https://cosagis.maps.arcgis.com/arcgis/rest/services/SAPD/FeatureServer/0',
+    crimeField:'Highest NIBRS', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.bexar.org/2704/Active-Warrants',
+    jailUrl:'https://jailrecords.bexar.org/',
+    placeholderAddress:'300 Alamo Plaza' },
+  { id:'dallas',        name:'Dallas',         state:'TX', country:'US',
+    lat:32.7767, lng:-96.7970, zoom:13, geocodeSuffix:'Dallas, TX',
+    esriLayer:'socrata:www.dallasopendata.com',
+    crimeField:'Type of Incident', updateFreq:'Daily', apiStatus:'~',
+    warrantUrl:'https://www.dallascounty.org/departments/sheriff/warrants.php',
+    jailUrl:'https://www.dallascounty.org/departments/jail/',
+    placeholderAddress:'1500 Marilla St' },
+  { id:'austin',        name:'Austin',         state:'TX', country:'US',
+    lat:30.2672, lng:-97.7431, zoom:13, geocodeSuffix:'Austin, TX',
+    esriLayer:'https://data.austintexas.gov/resource/fdj4-gpfu.json',
+    crimeField:'crime_type', updateFreq:'Daily', apiStatus:'~',
+    warrantUrl:'https://www.traviscountytx.gov/sheriff/warrants',
+    jailUrl:'https://www.tcso.org/inmate-search',
+    placeholderAddress:'301 W 2nd St' },
+  { id:'jacksonville',  name:'Jacksonville',   state:'FL', country:'US',
+    lat:30.3322, lng:-81.6557, zoom:13, geocodeSuffix:'Jacksonville, FL',
+    esriLayer:'https://gis.coj.net/arcgis/rest/services/JSO/FeatureServer/0',
+    crimeField:'CRIME_TYPE', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.jaxsheriff.org/services/warrant-search',
+    jailUrl:'https://www.jaxsheriff.org/services/inmate-search',
+    placeholderAddress:'117 W Duval St' },
+  { id:'columbus',      name:'Columbus',       state:'OH', country:'US',
+    lat:39.9612, lng:-82.9988, zoom:13, geocodeSuffix:'Columbus, OH',
+    esriLayer:'https://columbus.maps.arcgis.com/arcgis/rest/services/Crime/FeatureServer/0',
+    crimeField:'OFFENSE', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.franklincountyohio.gov/Sheriff/Warrants',
+    jailUrl:'https://fcciportal.franklincountyohio.gov/',
+    placeholderAddress:'90 W Broad St' },
+  { id:'seattle',       name:'Seattle',        state:'WA', country:'US',
+    lat:47.6062, lng:-122.3321, zoom:13, geocodeSuffix:'Seattle, WA',
+    esriLayer:'https://data.seattle.gov/resource/tazs-3rd5.json',
+    crimeField:'Primary Type', updateFreq:'Daily', apiStatus:'~',
+    warrantUrl:'https://www.kingcounty.gov/courts/district-court/warrants.aspx',
+    jailUrl:'https://www.kingcounty.gov/depts/adult-and-juvenile-detention/jails/inmate-search.aspx',
+    placeholderAddress:'600 4th Ave' },
+  { id:'nashville',     name:'Nashville',      state:'TN', country:'US',
+    lat:36.1627, lng:-86.7816, zoom:13, geocodeSuffix:'Nashville, TN',
+    esriLayer:'https://data.nashville.gov/resource/2u6v-ujjs.json',
+    crimeField:'OFFENSE_DESCRIPTION', updateFreq:'Daily', apiStatus:'~',
+    warrantUrl:'https://www.dcso.com/inmate-search/',
+    jailUrl:'https://www.dcso.com/inmate-search/',
+    placeholderAddress:'1 Public Square' },
+  { id:'baltimore',     name:'Baltimore',      state:'MD', country:'US',
+    lat:39.2904, lng:-76.6122, zoom:13, geocodeSuffix:'Baltimore, MD',
+    esriLayer:'https://gis-baltimore.opendata.arcgis.com/arcgis/rest/services/Crime/FeatureServer/0',
+    crimeField:'Description', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.baltimorecountymd.gov/departments/police/warrants',
+    jailUrl:'https://www.bcboc.org/inmate-search',
+    placeholderAddress:'100 N Holliday St' },
+  { id:'portland',      name:'Portland',       state:'OR', country:'US',
+    lat:45.5231, lng:-122.6765, zoom:13, geocodeSuffix:'Portland, OR',
+    esriLayer:'https://pdx.maps.arcgis.com/arcgis/rest/services/PPB/FeatureServer/0',
+    crimeField:'OFFENSE_CATEGORY', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.mcso.us/inmate-search',
+    jailUrl:'https://www.mcso.us/inmate-search',
+    placeholderAddress:'1221 SW 4th Ave' },
+  { id:'charlotte',     name:'Charlotte',      state:'NC', country:'US',
+    lat:35.2271, lng:-80.8431, zoom:13, geocodeSuffix:'Charlotte, NC',
+    esriLayer:'https://cmpd.maps.arcgis.com/arcgis/rest/services/Crime/FeatureServer/0',
+    crimeField:'CATEGORY', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.mecksheriff.com/services/warrant-search',
+    jailUrl:'https://www.mecksheriff.com/services/inmate-search',
+    placeholderAddress:'600 E Trade St' },
+  { id:'atlanta',       name:'Atlanta',        state:'GA', country:'US',
+    lat:33.7490, lng:-84.3880, zoom:13, geocodeSuffix:'Atlanta, GA',
+    esriLayer:'https://gis.atlantaga.gov/arcgis/rest/services/Crime/FeatureServer/0',
+    crimeField:'UC2_Literal', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.fultoncountyga.gov/inside-fulton-county/fulton-county-departments/sheriff/warrants',
+    jailUrl:'https://ody.fultoncountyga.gov/portal/',
+    placeholderAddress:'68 Mitchell St SW' },
+  // ── Canada ─────────────────────────────────────────────────────────────────
+  { id:'toronto',       name:'Toronto',        state:'ON', country:'CA',
+    lat:43.6532, lng:-79.3832, zoom:13, geocodeSuffix:'Toronto, ON, Canada',
+    esriLayer:'https://services.arcgis.com/AVP60cs0Q9PEA8rH/arcgis/rest/services/Major_Crime_Indicators_Open_Data/FeatureServer/0',
+    crimeField:'MCI_CATEGORY', updateFreq:'Annual', apiStatus:'✅',
+    warrantUrl:'https://www.torontopolice.on.ca/services/warrants.php',
+    jailUrl:'https://www.mcscs.jus.gov.on.ca/english/corr_serv/InstitutionalServices/FindInmate/findInmate.html',
+    placeholderAddress:'100 Queen St W' },
+  { id:'vancouver',     name:'Vancouver',      state:'BC', country:'CA',
+    lat:49.2827, lng:-123.1207, zoom:13, geocodeSuffix:'Vancouver, BC, Canada',
+    esriLayer:'https://geodata.vancouver.ca/arcgis/rest/services/Crime/FeatureServer/0',
+    crimeField:'TYPE', updateFreq:'Annual', apiStatus:'✅',
+    warrantUrl:'https://www.vancouvercourts.ca/',
+    jailUrl:'https://www.bcjails.gov.bc.ca/',
+    placeholderAddress:'453 W 12th Ave' },
+  { id:'calgary',       name:'Calgary',        state:'AB', country:'CA',
+    lat:51.0447, lng:-114.0719, zoom:13, geocodeSuffix:'Calgary, AB, Canada',
+    esriLayer:'https://data.calgary.ca/resource/crime-stats',
+    crimeField:'category', updateFreq:'Annual', apiStatus:'✅',
+    warrantUrl:'https://www.calgary.ca/cps/Pages/Police-Home.aspx',
+    jailUrl:'https://www.albertacourts.ca/',
+    placeholderAddress:'800 Macleod Trail SE' },
+  { id:'ottawa',        name:'Ottawa',         state:'ON', country:'CA',
+    lat:45.4215, lng:-75.6919, zoom:13, geocodeSuffix:'Ottawa, ON, Canada',
+    esriLayer:'https://ottawa.ca/arcgis/rest/services/Crime/FeatureServer/0',
+    crimeField:'offence_type', updateFreq:'Annual', apiStatus:'✅',
+    warrantUrl:'https://www.ottawapolice.ca/en/services-and-community/warrants.aspx',
+    jailUrl:'https://www.mcscs.jus.gov.on.ca/english/corr_serv/InstitutionalServices/FindInmate/findInmate.html',
+    placeholderAddress:'110 Laurier Ave W' },
+  // ── United Kingdom ─────────────────────────────────────────────────────────
+  { id:'london',        name:'London',         state:'England', country:'GB',
+    lat:51.5074, lng:-0.1278, zoom:13, geocodeSuffix:'London, UK',
+    esriLayer:'uk-police:metropolitan',
+    crimeField:'category', updateFreq:'Monthly', apiStatus:'✅',
+    warrantUrl:'https://www.met.police.uk/advice/advice-and-information/wsi/wanted/',
+    jailUrl:'https://www.gov.uk/find-prisoner',
+    placeholderAddress:'10 Downing Street' },
+  { id:'manchester',    name:'Manchester',     state:'England', country:'GB',
+    lat:53.4808, lng:-2.2426, zoom:13, geocodeSuffix:'Manchester, UK',
+    esriLayer:'uk-police:greater-manchester',
+    crimeField:'category', updateFreq:'Monthly', apiStatus:'✅',
+    warrantUrl:'https://www.gmp.police.uk/advice/advice-and-information/wsi/wanted/',
+    jailUrl:'https://www.gov.uk/find-prisoner',
+    placeholderAddress:'Albert Square' },
+  { id:'birmingham',    name:'Birmingham',     state:'England', country:'GB',
+    lat:52.4862, lng:-1.8904, zoom:13, geocodeSuffix:'Birmingham, UK',
+    esriLayer:'uk-police:west-midlands',
+    crimeField:'category', updateFreq:'Monthly', apiStatus:'✅',
+    warrantUrl:'https://www.westmidlands.police.uk/advice/advice-and-information/wsi/wanted/',
+    jailUrl:'https://www.gov.uk/find-prisoner',
+    placeholderAddress:'Victoria Square' },
+  // ── Australia ──────────────────────────────────────────────────────────────
+  { id:'sydney',        name:'Sydney',         state:'NSW', country:'AU',
+    lat:-33.8688, lng:151.2093, zoom:13, geocodeSuffix:'Sydney, NSW, Australia',
+    esriLayer:'bocsar:nsw',
+    crimeField:'offence', updateFreq:'Quarterly', apiStatus:'✅',
+    warrantUrl:'https://www.police.nsw.gov.au/crime/wanted_persons',
+    jailUrl:'https://www.correctiveservices.dcj.nsw.gov.au/inmate-search',
+    placeholderAddress:'1 Martin Place' },
+  { id:'melbourne',     name:'Melbourne',      state:'VIC', country:'AU',
+    lat:-37.8136, lng:144.9631, zoom:13, geocodeSuffix:'Melbourne, VIC, Australia',
+    esriLayer:'csa:victoria',
+    crimeField:'offence_category', updateFreq:'Annual', apiStatus:'✅',
+    warrantUrl:'https://www.police.vic.gov.au/wanted',
+    jailUrl:'https://www.corrections.vic.gov.au/',
+    placeholderAddress:'1 Swanston St' },
+  // ── New Zealand ────────────────────────────────────────────────────────────
+  { id:'auckland',      name:'Auckland',       state:'Auckland', country:'NZ',
+    lat:-36.8509, lng:174.7645, zoom:13, geocodeSuffix:'Auckland, New Zealand',
+    esriLayer:'nz-police:auckland-city',
+    crimeField:'anzsoc_division', updateFreq:'Monthly', apiStatus:'✅',
+    warrantUrl:'https://www.police.govt.nz/wanted',
+    jailUrl:'https://www.corrections.govt.nz/our_prison_system/find_an_inmate',
+    placeholderAddress:'1 Queen St' },
+  // ── Mexico ─────────────────────────────────────────────────────────────────
+  { id:'mexicocity',    name:'Mexico City',    state:'CDMX', country:'MX',
+    lat:19.4326, lng:-99.1332, zoom:13, geocodeSuffix:'Ciudad de Mexico, Mexico',
+    esriLayer:'https://services.arcgis.com/CDMX/arcgis/rest/services/Carpetas/FeatureServer/0',
+    crimeField:'delito', updateFreq:'Daily', apiStatus:'✅',
+    warrantUrl:'https://www.fgjcdmx.gob.mx/',
+    jailUrl:'https://reclusorios.cdmx.gob.mx/',
+    placeholderAddress:'Plaza de la Constitucion' },
+];
+
+// ── Group configs by country ──────────────────────────────────────────────────
+
+const COUNTRY_GROUPS = [
+  { code:'US', flag:'🇺🇸', label:'United States', cities: CITY_CONFIGS.filter(c=>c.country==='US') },
+  { code:'CA', flag:'🇨🇦', label:'Canada',         cities: CITY_CONFIGS.filter(c=>c.country==='CA') },
+  { code:'GB', flag:'🇬🇧', label:'United Kingdom', cities: CITY_CONFIGS.filter(c=>c.country==='GB') },
+  { code:'AU', flag:'🇦🇺', label:'Australia',      cities: CITY_CONFIGS.filter(c=>c.country==='AU') },
+  { code:'NZ', flag:'🇳🇿', label:'New Zealand',    cities: CITY_CONFIGS.filter(c=>c.country==='NZ') },
+  { code:'MX', flag:'🇲🇽', label:'Mexico',         cities: CITY_CONFIGS.filter(c=>c.country==='MX') },
+];
+
+// ── Sub-accordion ─────────────────────────────────────────────────────────────
+
+function CountryGroup({
+  flag, label, cities, selectedCity, onSelect, openKey, setOpenKey
+}: {
+  flag: string; label: string; cities: CityConfig[];
+  selectedCity: CityConfig; onSelect: (c: CityConfig) => void;
+  openKey: string; setOpenKey: (k: string) => void;
+}) {
+  const isOpen = openKey === label;
+  const hasSelected = cities.some(c => c.id === selectedCity.id);
+
+  return (
+    <div style={{
+      borderRadius: 14,
+      border: isOpen
+        ? '1px solid rgba(34,211,238,0.35)'
+        : hasSelected
+          ? '1px solid rgba(16,185,129,0.4)'
+          : '1px solid rgba(255,255,255,0.07)',
+      background: isOpen ? 'rgba(34,211,238,0.04)' : 'rgba(255,255,255,0.02)',
+      overflow: 'hidden',
+      marginBottom: 8,
+    }}>
+      {/* Header */}
+      <button
+        onClick={() => setOpenKey(isOpen ? '' : label)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', padding: '11px 14px',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 18 }}>{flag}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{label}</span>
+          <span style={{
+            fontSize: 10, padding: '2px 7px', borderRadius: 20,
+            background: 'rgba(34,211,238,0.12)', color: '#22d3ee',
+          }}>{cities.length} cities</span>
+          {hasSelected && (
+            <span style={{
+              fontSize: 10, padding: '2px 7px', borderRadius: 20,
+              background: 'rgba(16,185,129,0.15)', color: '#10b981',
+            }}>✓ selected</span>
+          )}
+        </div>
+        <span style={{
+          fontSize: 18, fontWeight: 900, color: isOpen ? '#22d3ee' : '#475569',
+          lineHeight: 1, userSelect: 'none',
+        }}>{isOpen ? '−' : '+'}</span>
+      </button>
+
+      {/* City list */}
+      {isOpen && (
+        <div style={{ padding: '0 10px 12px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 7 }}>
+            {cities.map(city => {
+              const active = city.id === selectedCity.id;
+              return (
+                <button
+                  key={city.id}
+                  onClick={() => onSelect(city)}
+                  style={{
+                    padding: '7px 13px', borderRadius: 20, fontSize: 12,
+                    fontWeight: active ? 700 : 500, cursor: 'pointer',
+                    border: active
+                      ? '1px solid rgba(16,185,129,0.6)'
+                      : '1px solid rgba(34,211,238,0.2)',
+                    background: active
+                      ? 'linear-gradient(90deg,#10b981,#059669)'
+                      : 'rgba(255,255,255,0.04)',
+                    color: active ? 'white' : '#94a3b8',
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {active ? '✓ ' : ''}{city.name}
+                  {city.state ? `, ${city.state}` : ''}
+                  <span style={{
+                    marginLeft: 5, fontSize: 10,
+                    color: city.apiStatus === '✅'
+                      ? (active ? 'rgba(255,255,255,0.8)' : '#10b981')
+                      : '#f59e0b',
+                  }}>{city.apiStatus}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Selected city detail */}
+          {hasSelected && (
+            <div style={{
+              marginTop: 12, padding: '10px 12px', borderRadius: 10,
+              background: 'rgba(16,185,129,0.06)',
+              border: '1px solid rgba(16,185,129,0.2)',
+            }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#10b981', margin: '0 0 6px' }}>
+                ✓ {selectedCity.name} is your active city
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
+                {[
+                  ['Crime data', selectedCity.esriLayer.startsWith('http') ? 'ESRI FeatureServer' : selectedCity.esriLayer.split(':')[0].toUpperCase()],
+                  ['Updates', selectedCity.updateFreq],
+                  ['Warrants', selectedCity.warrantNote || 'Sheriff website'],
+                  ['Geocoder suffix', selectedCity.geocodeSuffix],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <span style={{ fontSize: 10, color: '#475569' }}>{k}: </span>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main WhereItWorks component ───────────────────────────────────────────────
+
+function WhereItWorks({
+  onCitySelect, selectedCity
+}: {
+  onCitySelect: (city: CityConfig) => void;
+  selectedCity: CityConfig;
+}) {
+  const [openCountry, setOpenCountry] = useState('');
+
+  return (
+    <Section title={`🌎  Where It Works — ${selectedCity.flag || '📍'} ${selectedCity.name} active`} dark={true}>
+      <p style={{ fontSize: 11, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
+        Select your city to set the crime map, geocoder, warrant links, and address bar.
+        Your selection is saved for next time. ✅ = full API · ~ = web form link
+      </p>
+
+      {/* Currently active city pill */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+        borderRadius: 12, background: 'rgba(16,185,129,0.08)',
+        border: '1px solid rgba(16,185,129,0.3)', marginBottom: 14,
+      }}>
+        <span style={{ fontSize: 14 }}>📍</span>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#10b981' }}>
+            Active city: {selectedCity.name}{selectedCity.state ? `, ${selectedCity.state}` : ''}
+          </span>
+          <span style={{ fontSize: 10, color: '#475569', marginLeft: 8 }}>
+            {selectedCity.geocodeSuffix} · {selectedCity.updateFreq} updates
+          </span>
+        </div>
+        <span style={{ fontSize: 12, color: selectedCity.apiStatus === '✅' ? '#10b981' : '#f59e0b' }}>
+          {selectedCity.apiStatus}
+        </span>
+      </div>
+
+      {/* Country sub-accordions */}
+      {COUNTRY_GROUPS.map(group => (
+        <CountryGroup
+          key={group.code}
+          flag={group.flag}
+          label={group.label}
+          cities={group.cities}
+          selectedCity={selectedCity}
+          onSelect={city => {
+            onCitySelect(city);
+            setOpenCountry('');
+          }}
+          openKey={openCountry}
+          setOpenKey={setOpenCountry}
+        />
+      ))}
+
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' as const, marginTop: 12 }}>
+        {[['✅', 'Full ESRI/REST API', '#10b981'], ['~', 'Web form / partial', '#f59e0b']].map(([icon, label, color]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ fontSize: 13, color: color as string }}>{icon}</span>
+            <span style={{ fontSize: 10, color: '#64748b' }}>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ fontSize: 10, color: '#475569', lineHeight: 1.6, margin: '10px 0 0' }}>
+        Modules 3–7 (sex offenders, nearest services, circle/SOS, GPS, panic) work in every city with no changes.
+        Selecting a city clears your current address for a fresh start.
+      </p>
+    </Section>
+  );
+}
+
 export default function SafeCirclePage() {
   const [activeTab, setActiveTab] = useState<TabId>('main');
   const [showDisclaimer,   setShowDisclaimer]   = useState(true);
@@ -979,10 +1509,38 @@ export default function SafeCirclePage() {
     if (result.outcome === 'accepted') setShowInstallBanner(false);
   }
 
-  // Address
-  const [address,  setAddress]  = useState('');
-  const [addrSet,  setAddrSet]  = useState(false);
-  const [geoLabel, setGeoLabel] = useState('');
+  // Address — persisted across refreshes
+  const [selectedCity, setSelectedCity] = useState<CityConfig>(() => {
+    try {
+      const s = typeof window !== 'undefined' ? localStorage.getItem('sc_city') : null;
+      return s ? JSON.parse(s) : CITY_CONFIGS[0];
+    } catch { return CITY_CONFIGS[0]; }
+  });
+
+  function handleCitySelect(city: CityConfig) {
+    setSelectedCity(city);
+    setAddress('');
+    setAddrSet(false);
+    setGeoLabel('');
+    lastGeoRef.current = '';
+    setServices({ police: null, fire: null, hospital: null });
+    try {
+      localStorage.setItem('sc_city', JSON.stringify(city));
+      localStorage.removeItem('sc_address');
+      localStorage.removeItem('sc_addrSet');
+      localStorage.removeItem('sc_geoLabel');
+    } catch {}
+  }
+
+  const [address,  setAddress]  = useState(() => {
+    try { return typeof window !== 'undefined' ? (localStorage.getItem('sc_address') || '') : ''; } catch { return ''; }
+  });
+  const [addrSet,  setAddrSet]  = useState(() => {
+    try { return typeof window !== 'undefined' ? localStorage.getItem('sc_addrSet') === 'true' : false; } catch { return false; }
+  });
+  const [geoLabel, setGeoLabel] = useState(() => {
+    try { return typeof window !== 'undefined' ? (localStorage.getItem('sc_geoLabel') || '') : ''; } catch { return ''; }
+  });
 
   // Services
   const [services,   setServices]   = useState<EmergencyServices>({ police: null, fire: null, hospital: null });
@@ -991,7 +1549,33 @@ export default function SafeCirclePage() {
   const lastGeoRef = useRef('');
 
   // Contacts / SOS
-  const [contacts,  setContacts]  = useState<Contact[]>([]);
+  // Platform detection
+  const platform = typeof navigator !== 'undefined'
+    ? /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'ios'
+    : /Android/i.test(navigator.userAgent) ? 'android'
+    : 'desktop'
+    : 'desktop';
+
+  // Dummy contacts for first-time users
+  const DUMMY_CONTACTS: Contact[] = [
+    { id: 'dummy-1', name: 'Maria Gonzalez', phone: '901-555-0142', email: 'maria.g@homehealthcare.com' },
+    { id: 'dummy-2', name: 'James Whitfield', phone: '901-555-0287', email: 'jwhitfield@shelbysos.org' },
+    { id: 'dummy-3', name: 'Tanya Brooks',    phone: '901-555-0391', email: 'tbrooks@caregivers.net' },
+    { id: 'dummy-4', name: 'Kevin Okafor',    phone: '901-555-0456', email: 'k.okafor@midsouthsocial.com' },
+  ];
+
+  const [contacts, setContacts] = useState<Contact[]>(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('sc_contacts') : null;
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DUMMY_CONTACTS;
+  });
+
+  // Persist contacts to localStorage whenever they change
+  useEffect(() => {
+    try { localStorage.setItem('sc_contacts', JSON.stringify(contacts)); } catch {}
+  }, [contacts]);
   const [newName,   setNewName]   = useState('');
   const [newPhone,  setNewPhone]  = useState('');
   const [newEmail,  setNewEmail]  = useState('');
@@ -1016,6 +1600,7 @@ export default function SafeCirclePage() {
     geocodeAddress(raw).then(geo => {
       if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return; }
       setGeoLabel(geo.label);
+      try { localStorage.setItem('sc_geoLabel', geo.label); } catch {}
       return fetch(`/api/services?lat=${geo.lat}&lng=${geo.lng}`).then(r => r.json());
     }).then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
       .catch(err => { setSvcError(err.message); setSvcLoading(false); });
@@ -1025,12 +1610,49 @@ export default function SafeCirclePage() {
     if (!address.trim()) return;
     lastGeoRef.current = '';
     setAddrSet(true);
+    try { localStorage.setItem('sc_addrSet','true'); localStorage.setItem('sc_address', address.trim()); } catch {}
   }
 
   function addContact() {
     if (!newName.trim()) return;
     setContacts(c => [...c, { id: crypto.randomUUID(), name: newName.trim(), phone: newPhone.trim(), email: newEmail.trim() }]);
     setNewName(''); setNewPhone(''); setNewEmail('');
+  }
+
+  function initiateGoogleContactsImport() {
+    const google = (window as any).google;
+    if (!google?.accounts?.oauth2) return;
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: '905532345244-ro7u2p478c0pvmluisqj0dvcmfa09ec9.apps.googleusercontent.com',
+      scope: 'https://www.googleapis.com/auth/contacts.readonly',
+      callback: async (tokenResponse: any) => {
+        if (tokenResponse.error) return;
+        try {
+          const r = await fetch(
+            'https://people.googleapis.com/v1/people/me/connections?personFields=names,phoneNumbers,emailAddresses&pageSize=50',
+            { headers: { Authorization: `Bearer ${tokenResponse.access_token}` } }
+          );
+          const data = await r.json();
+          const imported: Contact[] = (data.connections || [])
+            .filter((p: any) => p.names?.length)
+            .map((p: any) => ({
+              id: crypto.randomUUID(),
+              name:  p.names?.[0]?.displayName || '',
+              phone: p.phoneNumbers?.[0]?.value || '',
+              email: p.emailAddresses?.[0]?.value || '',
+            }))
+            .filter((c: Contact) => c.name);
+          if (imported.length > 0) {
+            setContacts(prev => {
+              const existing = new Set(prev.map(c => c.name.toLowerCase()));
+              const fresh = imported.filter(c => !existing.has(c.name.toLowerCase()));
+              return [...prev.filter(c => !c.id.startsWith('dummy-')), ...fresh];
+            });
+          }
+        } catch (e) { console.error('Google Contacts import failed', e); }
+      },
+    });
+    client.requestAccessToken();
   }
 
   function importCsv() {
@@ -1270,11 +1892,11 @@ export default function SafeCirclePage() {
             background:'linear-gradient(135deg,#0f1f3d,#0a1628)',
             padding:'16px', boxShadow:'0 4px 24px rgba(0,0,0,0.4)',
           }}>
-            <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, color:'#22d3ee', textTransform:'uppercase' }}>Address</p>
-            <p style={{ fontSize:11, color:'#475569' }}>Street number and name only — no Rd, St, Ave, or Cove.</p>
+            <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, color:'#22d3ee', textTransform:'uppercase' }}>Address — {selectedCity.name}</p>
+            <p style={{ fontSize:11, color:'#475569' }}>Street number and name only — no Rd, St, Ave, or suffix.</p>
             <div style={{ display:"flex", gap:8 }}>
-              <input type="text" placeholder="4128 Weymouth" value={address}
-                onChange={e => { setAddress(e.target.value); setAddrSet(false); setGeoLabel(''); }}
+              <input type="text" placeholder={selectedCity.placeholderAddress} value={address}
+                onChange={e => { const v = e.target.value; setAddress(v); setAddrSet(false); setGeoLabel(''); try { localStorage.setItem('sc_address', v); localStorage.setItem('sc_addrSet','false'); localStorage.removeItem('sc_geoLabel'); } catch {} }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSetAddress(); }}
                 style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:14,
                   background:'rgba(255,255,255,0.06)', border:'1px solid rgba(34,211,238,0.3)',
@@ -1296,15 +1918,16 @@ export default function SafeCirclePage() {
           </Section>
 
           {/* Warrants */}
-          <Section title="⚖️  Warrant search" dark={true}>
-            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>Shelby County Sheriff's warrant database.</p>
+          <Section title={`⚖️  Warrant search — ${selectedCity.name}`} dark={true}>
+            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>{selectedCity.name} warrant database — {selectedCity.warrantNote || 'Sheriff / court website'}.</p>
             {address.trim() ? (
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                <a href={warrantUrl(address)} target="_blank" rel="noopener noreferrer"
+                <a href={warrantUrl(address, selectedCity)} target="_blank" rel="noopener noreferrer"
                   style={{ display:"inline-block", padding:"10px 20px", borderRadius:12, fontSize:13, fontWeight:700, color:"white", textDecoration:"none", background:"linear-gradient(90deg,#f59e0b,#d97706)", boxShadow:"0 4px 15px rgba(245,158,11,0.4)" }}>
-                  Check warrants — {splitAddress(address).num} {splitAddress(address).name.split(/\s+/)[0]} →
+                  {selectedCity.id === 'memphis'
+                    ? `Check warrants — ${splitAddress(address).num} ${splitAddress(address).name.split(/\s+/)[0]} →`
+                    : `Search ${selectedCity.name} warrants →`}
                 </a>
-                <p style={{ fontSize:11, color:"#475569" }}>Search by name: <a href="https://warrants.shelby-sheriff.org/w_warrant_result.php" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">Open warrant search</a></p>
               </div>
             ) : <p style={{ fontSize:11, color:"#475569" }}>Enter an address above first.</p>}
           </Section>
@@ -1318,9 +1941,9 @@ export default function SafeCirclePage() {
           </Section>
 
           {/* Jail roster */}
-          <Section title="🏛  Shelby County jail roster" dark={true}>
-            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>Who is currently in custody.</p>
-            <a href={JAIL_URL} target="_blank" rel="noopener noreferrer" style={{ display:"inline-block", padding:"10px 20px", borderRadius:12, fontSize:13, fontWeight:700, color:"white", textDecoration:"none", background:"linear-gradient(90deg,#06b6d4,#0891b2)", boxShadow:"0 4px 15px rgba(6,182,212,0.4)" }}>Open jail roster →</a>
+          <Section title={`🏛  ${selectedCity.name} jail roster`} dark={true}>
+            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>Who is currently in custody in {selectedCity.name}.</p>
+            <a href={selectedCity.jailUrl} target="_blank" rel="noopener noreferrer" style={{ display:"inline-block", padding:"10px 20px", borderRadius:12, fontSize:13, fontWeight:700, color:"white", textDecoration:"none", background:"linear-gradient(90deg,#06b6d4,#0891b2)", boxShadow:"0 4px 15px rgba(6,182,212,0.4)" }}>Open {selectedCity.name} jail roster →</a>
           </Section>
 
           {/* Emergency services */}
@@ -1336,31 +1959,100 @@ export default function SafeCirclePage() {
 
           {/* Circle of friends + SOS */}
           <Section title="👥  Circle of friends &amp; SOS alert" dark={true}>
+            {/* SOS button */}
             <button onClick={triggerSos} disabled={contacts.length === 0}
               style={{ width:'100%', padding:'14px', borderRadius:14, fontSize:16, fontWeight:900,
               border:'none', cursor: contacts.length === 0 ? 'not-allowed' : 'pointer',
               background: sosActive ? '#ef4444' : contacts.length === 0 ? '#1e293b' : 'linear-gradient(90deg,#ef4444,#dc2626)',
               color: contacts.length === 0 ? '#475569' : 'white', marginBottom:16,
               boxShadow: sosActive || contacts.length > 0 ? '0 4px 20px rgba(239,68,68,0.5)' : 'none',
+              touchAction:'manipulation', WebkitTapHighlightColor:'transparent',
             }}>
               {sosActive ? '🚨 SOS SENT' : '🚨 SOS — Alert my circle NOW'}
             </button>
             {contacts.length === 0 && <p style={{ fontSize:11, color:"#475569", marginBottom:12, marginTop:-8 }}>Add contacts below to enable SOS.</p>}
-            {contacts.length > 0 && <div style={{ marginBottom:16 }}>{contacts.map(c => <ContactRow key={c.id} contact={c} onRemove={id => setContacts(c => c.filter(x => x.id !== id))} />)}</div>}
-            <div className="space-y-2 mb-4">
-              <p style={{ fontSize:11, color:"#64748b", fontWeight:600 }}>Add a contact</p>
-              <input type="text" placeholder="Full name" value={newName} onChange={e => setNewName(e.target.value)} style={{ width:"100%", padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none", boxSizing:"border-box" }} />
-              <div style={{ display:"flex", gap:8 }}>
-                <input type="tel" placeholder="Phone" value={newPhone} onChange={e => setNewPhone(e.target.value)} style={{ flex:1, padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none" }} />
-                <input type="email" placeholder="Email" value={newEmail} onChange={e => setNewEmail(e.target.value)} style={{ flex:1, padding:"10px 14px", borderRadius:12, fontSize:13, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(34,211,238,0.2)", color:"white", outline:"none" }} />
+
+            {/* Contact list */}
+            {contacts.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                {contacts.map(c => (
+                  <div key={c.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontSize:13, fontWeight:600, color:'#e2e8f0', margin:0 }}>{c.name}</p>
+                      <p style={{ fontSize:11, color:'#64748b', margin:0 }}>{c.phone}{c.phone && c.email ? ' · ' : ''}{c.email}</p>
+                      {c.id.startsWith('dummy-') && (
+                        <p style={{ fontSize:10, color:'#f59e0b', margin:0 }}>⚠ Sample — tap Edit to replace with real info</p>
+                      )}
+                    </div>
+                    <div style={{ display:'flex', gap:4, flexShrink:0, marginLeft:8 }}>
+                      {c.phone && <a href={`tel:${c.phone}`} style={{ fontSize:11, padding:'4px 8px', borderRadius:8, background:'rgba(255,255,255,0.07)', color:'#94a3b8', textDecoration:'none' }}>Call</a>}
+                      {c.phone && <a href={`sms:${c.phone}`} style={{ fontSize:11, padding:'4px 8px', borderRadius:8, background:'rgba(255,255,255,0.07)', color:'#94a3b8', textDecoration:'none' }}>SMS</a>}
+                      <button onClick={() => setContacts(prev => prev.filter(x => x.id !== c.id))} style={{ fontSize:11, padding:'4px 8px', borderRadius:8, background:'rgba(239,68,68,0.1)', color:'#f87171', border:'none', cursor:'pointer' }}>✕</button>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <button onClick={addContact} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Add contact</button>
+            )}
+
+            {/* Google Contacts import */}
+            <div style={{ marginBottom:16, padding:'12px 14px', borderRadius:14, border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.04)' }}>
+              <p style={{ fontSize:12, fontWeight:700, color:'#22d3ee', margin:'0 0 6px' }}>📱 Import from Google Contacts</p>
+              <p style={{ fontSize:11, color:'#64748b', margin:'0 0 10px' }}>Sign in with Google to pull your contacts directly into your circle.</p>
+              <div id="g_id_onload"
+                data-client_id="905532345244-ro7u2p478c0pvmluisqj0dvcmfa09ec9.apps.googleusercontent.com"
+                data-callback="handleGoogleContact"
+                data-auto_prompt="false">
+              </div>
+              <button
+                onClick={() => {
+                  // Load Google Identity Services if not already loaded
+                  if (!(window as any).google?.accounts) {
+                    const script = document.createElement('script');
+                    script.src = 'https://accounts.google.com/gsi/client';
+                    script.onload = () => initiateGoogleContactsImport();
+                    document.head.appendChild(script);
+                  } else {
+                    initiateGoogleContactsImport();
+                  }
+                }}
+                style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 16px', borderRadius:12,
+                  border:'1px solid rgba(255,255,255,0.15)', background:'white', cursor:'pointer',
+                  fontSize:13, fontWeight:600, color:'#1f2937', touchAction:'manipulation',
+                }}>
+                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+                Import from Google
+              </button>
+              {platform === 'ios' && <p style={{ fontSize:10, color:'#475569', marginTop:6 }}>📱 iPhone detected — Safari works best for Google sign-in.</p>}
+              {platform === 'android' && <p style={{ fontSize:10, color:'#475569', marginTop:6 }}>📱 Android detected — Chrome works best for Google sign-in.</p>}
             </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              <p className="text-xs text-slate-400 font-medium">Import from CSV</p>
-              <p style={{ fontSize:11, color:"#475569" }}>One per line: Full Name, Email, Phone</p>
-              <textarea rows={3} placeholder={'Jane Smith, jane@example.com, 901-555-1234'} value={csvInput} onChange={e => setCsvInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono" />
-              <button onClick={importCsv} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Import contacts</button>
+
+            {/* Manual add */}
+            <div style={{ marginBottom:16 }}>
+              <p style={{ fontSize:11, color:'#64748b', fontWeight:600, marginBottom:8 }}>Or add manually</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <input type="text" placeholder="Full name" value={newName} onChange={e => setNewName(e.target.value)}
+                  style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
+                <div style={{ display:'flex', gap:8 }}>
+                  <input type="tel" placeholder="Phone" value={newPhone} onChange={e => setNewPhone(e.target.value)}
+                    style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', color:'white', outline:'none' }} />
+                  <input type="email" placeholder="Email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
+                    style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', color:'white', outline:'none' }} />
+                </div>
+                <button onClick={addContact} style={{ padding:'10px 16px', borderRadius:12, fontSize:13, fontWeight:600, color:'white', border:'none', cursor:'pointer', background:'linear-gradient(90deg,#22d3ee,#3b82f6)', touchAction:'manipulation' }}>
+                  + Add to circle
+                </button>
+              </div>
+            </div>
+
+            {/* CSV import */}
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              <p style={{ fontSize:11, color:'#64748b', fontWeight:600 }}>Import from CSV</p>
+              <p style={{ fontSize:11, color:'#475569' }}>One per line: Full Name, Email, Phone</p>
+              <textarea rows={3} placeholder={'Jane Smith, jane@example.com, 901-555-1234'} value={csvInput} onChange={e => setCsvInput(e.target.value)}
+                style={{ width:'100%', padding:'10px 12px', borderRadius:12, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', fontSize:12, color:'#e2e8f0', outline:'none', fontFamily:'monospace', boxSizing:'border-box' }} />
+              <button onClick={importCsv} style={{ padding:'10px 16px', borderRadius:12, fontSize:13, fontWeight:600, color:'white', border:'none', cursor:'pointer', background:'rgba(255,255,255,0.08)', touchAction:'manipulation' }}>
+                Import CSV
+              </button>
             </div>
           </Section>
 
@@ -1394,6 +2086,9 @@ export default function SafeCirclePage() {
           </Section>
 
 
+
+          {/* ── Where It Works — city selector ── */}
+          <WhereItWorks onCitySelect={handleCitySelect} selectedCity={selectedCity} />
 
           {/* Footer */}
           <div style={{ textAlign:'center', padding:'16px 0 8px' }}>

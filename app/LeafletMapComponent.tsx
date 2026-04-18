@@ -139,6 +139,9 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
         icon: L.divIcon({ html: getIconSvg(cat), className: '', iconSize: [30,30], iconAnchor: [15,15], popupAnchor: [0,-18] }),
       });
       (marker as any)._category = cat;
+      (marker as any)._crimeId  = a.Crime_ID;
+      (marker as any)._lat      = a.Latitude;
+      (marker as any)._lng      = a.Longitude;
       marker.bindPopup(`<div style="font-size:12px;min-width:180px;line-height:1.6">
         <b style="color:${getColor(cat)}">${cat}</b><br>
         ${a.UCR_Description || ''}<br>
@@ -167,7 +170,18 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       const map = L.map('ps-map').setView([lat, lon], 14);
       mapRef.current = map;
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
-      L.circleMarker([lat, lon], { radius: 10, fillColor: '#2563eb', color: '#fff', weight: 2, fillOpacity: 1 }).addTo(map).bindPopup(`<b>Address</b><br>${geoRef.current.label}`);
+      const homeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
+        <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
+        <path d="M19 2 C10.16 2 3 9.16 3 18 C3 30 19 46 19 46 C19 46 35 30 35 18 C35 9.16 27.84 2 19 2Z"
+          fill="#facc15" stroke="#b45309" stroke-width="2" filter="url(#ds)"/>
+        <path d="M19 7 L28 15 L26 15 L26 25 L12 25 L12 15 L10 15 Z" fill="#1e3a5f"/>
+        <rect x="16" y="19" width="6" height="6" rx="1" fill="#facc15"/>
+        <circle cx="19" cy="16" r="1.5" fill="#facc15"/>
+      </svg>`;
+      L.marker([lat, lon], {
+        icon: L.divIcon({ html: homeSvg, className: '', iconSize: [38,48], iconAnchor: [19,46], popupAnchor: [0,-44] }),
+        zIndexOffset: 1000,
+      }).addTo(map).bindPopup(`<div style="font-size:13px;font-weight:700;color:#1e3a5f">📍 ${geoRef.current.label}</div>`);
       L.circle([lat, lon], { radius: meters(RADIUS_MILES), color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '4 4' }).addTo(map);
       buildMarkers(L, map, markersRef.current);
       setMapStatus(`${incidents.length} incidents — tap a category to filter`);
@@ -187,7 +201,18 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       const map = L.map('ps-map-big').setView([lat, lon], 14);
       bigMapRef.current = map;
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
-      L.circleMarker([lat, lon], { radius: 10, fillColor: '#2563eb', color: '#fff', weight: 2, fillOpacity: 1 }).addTo(map).bindPopup(`<b>Address</b><br>${geoRef.current!.label}`);
+      const homeSvg2 = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
+        <filter id="ds2"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
+        <path d="M19 2 C10.16 2 3 9.16 3 18 C3 30 19 46 19 46 C19 46 35 30 35 18 C35 9.16 27.84 2 19 2Z"
+          fill="#facc15" stroke="#b45309" stroke-width="2" filter="url(#ds2)"/>
+        <path d="M19 7 L28 15 L26 15 L26 25 L12 25 L12 15 L10 15 Z" fill="#1e3a5f"/>
+        <rect x="16" y="19" width="6" height="6" rx="1" fill="#facc15"/>
+        <circle cx="19" cy="16" r="1.5" fill="#facc15"/>
+      </svg>`;
+      L.marker([lat, lon], {
+        icon: L.divIcon({ html: homeSvg2, className: '', iconSize: [38,48], iconAnchor: [19,46], popupAnchor: [0,-44] }),
+        zIndexOffset: 1000,
+      }).addTo(map).bindPopup(`<div style="font-size:13px;font-weight:700;color:#1e3a5f">📍 ${geoRef.current!.label}</div>`);
       L.circle([lat, lon], { radius: meters(RADIUS_MILES), color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '4 4' }).addTo(map);
       buildMarkers(L, map, bigMarkersRef.current);
     }, 100);
@@ -282,37 +307,64 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
   // ── Filter bar ────────────────────────────────────────────────────────────
   function FilterBar() {
     const btnBase: React.CSSProperties = {
-      display:'inline-flex', alignItems:'center', gap:6,
-      padding:'5px 12px', borderRadius:20, fontSize:11, fontWeight:600,
-      cursor:'pointer', border:'1px solid', whiteSpace:'nowrap',
-      transition:'all 0.2s',
+      display:'inline-flex', alignItems:'center', gap:5,
+      padding:'6px 12px', borderRadius:20, fontSize:11, fontWeight:700,
+      cursor:'pointer', border:'1.5px solid', whiteSpace:'nowrap',
+      transition:'all 0.2s', letterSpacing:0.3,
     };
+    const activeLabel = activeFilter
+      ? `Showing ${categoryCounts.find(([c]) => c === activeFilter)?.[1] ?? 0} "${activeFilter}" incidents`
+      : `Showing ${incidents.length} total incidents`;
+
     return (
-      <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:8 }}>
-        <button onClick={() => setActiveFilter(null)} style={{
-          ...btnBase,
-          background: activeFilter === null ? 'rgba(34,211,238,0.2)' : 'rgba(255,255,255,0.06)',
-          borderColor: activeFilter === null ? '#22d3ee' : 'rgba(255,255,255,0.15)',
-          color: activeFilter === null ? '#22d3ee' : '#94a3b8',
-        }}>
-          All
-          <span style={{ background:'rgba(255,255,255,0.15)', borderRadius:10, padding:'1px 6px', fontSize:10 }}>{incidents.length}</span>
-        </button>
-        {categoryCounts.map(([cat, count]) => {
-          const color = getColor(cat); const isActive = activeFilter === cat;
-          return (
-            <button key={cat} onClick={() => setActiveFilter(isActive ? null : cat)} style={{
-              ...btnBase,
-              background: isActive ? color + '33' : 'rgba(255,255,255,0.06)',
-              borderColor: isActive ? color : 'rgba(255,255,255,0.15)',
-              color: isActive ? color : '#94a3b8',
-            }}>
-              <span style={{ width:8, height:8, borderRadius:'50%', background:color, flexShrink:0, display:'inline-block' }}/>
-              {cat}
-              <span style={{ background:'rgba(255,255,255,0.15)', borderRadius:10, padding:'1px 6px', fontSize:10 }}>{count}</span>
-            </button>
-          );
-        })}
+      <div>
+        {/* Summary line */}
+        <p style={{ fontSize:12, color:'#94a3b8', fontWeight:600, margin:'0 0 10px',
+          padding:'6px 10px', background:'rgba(34,211,238,0.06)',
+          borderRadius:10, border:'1px solid rgba(34,211,238,0.12)' }}>
+          {activeLabel}
+        </p>
+        {/* All button */}
+        <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:8 }}>
+          <button onClick={() => setActiveFilter(null)} style={{
+            ...btnBase,
+            background: activeFilter === null ? 'linear-gradient(90deg,#22d3ee,#3b82f6)' : 'rgba(34,211,238,0.07)',
+            borderColor: activeFilter === null ? '#22d3ee' : 'rgba(34,211,238,0.2)',
+            color: activeFilter === null ? '#0a1628' : '#22d3ee',
+            boxShadow: activeFilter === null ? '0 2px 12px rgba(34,211,238,0.35)' : 'none',
+          }}>
+            All
+            <span style={{
+              background: activeFilter === null ? 'rgba(0,0,0,0.2)' : 'rgba(34,211,238,0.15)',
+              borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:800,
+            }}>{incidents.length}</span>
+          </button>
+
+          {/* Category buttons */}
+          {categoryCounts.map(([cat, count]) => {
+            const color = getColor(cat);
+            const isActive = activeFilter === cat;
+            // Assign a lavender tint to non-active buttons for variety
+            const lavender = '#a855f7';
+            return (
+              <button key={cat} onClick={() => setActiveFilter(isActive ? null : cat)} style={{
+                ...btnBase,
+                background: isActive ? color + '28' : 'rgba(168,85,247,0.08)',
+                borderColor: isActive ? color : 'rgba(168,85,247,0.3)',
+                color: isActive ? color : '#c4b5fd',
+                boxShadow: isActive ? `0 2px 10px ${color}44` : 'none',
+              }}>
+                <span style={{ width:7, height:7, borderRadius:'50%', background: isActive ? color : lavender, flexShrink:0, display:'inline-block' }}/>
+                {cat}
+                <span style={{
+                  background: isActive ? color + '33' : 'rgba(168,85,247,0.2)',
+                  borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:800,
+                  color: isActive ? color : '#e9d5ff',
+                }}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -348,36 +400,146 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     );
   }
 
+  // ── Fly map to incident ───────────────────────────────────────────────────
+  function flyToIncident(crimeId: string, lat: number, lng: number) {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo([lat, lng], 17, { animate: true, duration: 0.8 });
+    const marker = markersRef.current.find(m => (m as any)._crimeId === crimeId);
+    if (marker) setTimeout(() => marker.openPopup(), 850);
+    // Scroll map into view
+    const el = document.getElementById('ps-map');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // ── Incident grid accordion ───────────────────────────────────────────────
+  function IncidentAccordion() {
+    const [open, setOpen] = useState(true);
+    const filtered = activeFilter
+      ? incidents.filter(f => (f.attributes.UCR_Category || 'OTHER').trim() === activeFilter)
+      : incidents;
+    const label = activeFilter
+      ? `${activeFilter} — ${filtered.length} incident${filtered.length !== 1 ? 's' : ''}`
+      : `All incidents — ${filtered.length}`;
+
+    return (
+      <div style={{
+        borderRadius:20,
+        border: open ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(168,85,247,0.35)',
+        background:'linear-gradient(135deg,#0f1f3d,#0a1628)',
+        overflow:'hidden',
+        boxShadow: open ? '0 4px 24px rgba(34,211,238,0.10)' : '0 4px 24px rgba(0,0,0,0.35)',
+      }}>
+        {/* Accordion header */}
+        <button onClick={() => setOpen(o => !o)} style={{
+          width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+          padding:'14px 16px',
+          background: open ? 'rgba(34,211,238,0.06)' : 'transparent',
+          border:'none', cursor:'pointer', textAlign:'left',
+        }}>
+          <span style={{ fontSize:13, fontWeight:700, color:'#f1f5f9' }}>
+            📋 {label}
+          </span>
+          <span style={{
+            display:'inline-flex', alignItems:'center', justifyContent:'center',
+            width:32, height:32, borderRadius:'50%',
+            background: open
+              ? 'linear-gradient(135deg,#22d3ee,#3b82f6)'
+              : 'linear-gradient(135deg,#a855f7,#7c3aed)',
+            color:'white', fontSize:20, fontWeight:900, lineHeight:1,
+            boxShadow: open ? '0 0 12px rgba(34,211,238,0.5)' : '0 0 12px rgba(168,85,247,0.5)',
+            flexShrink:0,
+          }}>{open ? '−' : '+'}</span>
+        </button>
+
+        {/* Incident grid */}
+        {open && (
+          <div style={{ padding:'4px 12px 14px', borderTop:'1px solid rgba(34,211,238,0.12)' }}>
+            {filtered.length === 0 ? (
+              <p style={{ fontSize:12, color:'#475569', padding:'12px 4px' }}>No incidents found.</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop:8 }}>
+                {filtered.map((f, i) => {
+                  const a = f.attributes;
+                  const cat = (a.UCR_Category || 'OTHER').trim();
+                  const color = getColor(cat);
+                  const date = a.Offense_Datetime
+                    ? new Date(a.Offense_Datetime).toLocaleDateString('en-US', { month:'short', day:'numeric' })
+                    : '';
+                  const hasCoords = typeof a.Latitude === 'number' && typeof a.Longitude === 'number';
+                  return (
+                    <div key={a.Crime_ID || i}
+                      onClick={() => hasCoords && flyToIncident(a.Crime_ID, a.Latitude, a.Longitude)}
+                      style={{
+                        display:'flex', alignItems:'center', gap:8,
+                        background:'rgba(255,255,255,0.04)',
+                        border:`1px solid ${color}22`,
+                        borderLeft:`3px solid ${color}`,
+                        borderRadius:8, padding:'5px 10px',
+                        cursor: hasCoords ? 'pointer' : 'default',
+                        transition:'background 0.15s',
+                      }}
+                      onMouseEnter={e => { if (hasCoords) (e.currentTarget as HTMLDivElement).style.background = `${color}15`; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)'; }}
+                    >
+                      {/* Pin icon */}
+                      {hasCoords && (
+                        <span style={{ fontSize:12, flexShrink:0, opacity:0.8 }}>📍</span>
+                      )}
+                      {/* Address */}
+                      <span style={{ flex:1, fontSize:11, color:'#e2e8f0', fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                        {a.Street_Address || '—'}
+                      </span>
+                      {/* Date */}
+                      <span style={{ fontSize:10, color:'#475569', flexShrink:0 }}>{date}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ── Render: map ───────────────────────────────────────────────────────────
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+
+      {/* Top row: address + controls */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
-        <span style={{ fontSize:13, fontWeight:600, color:'#e2e8f0' }}>{matchedAddr}</span>
+        <span style={{ fontSize:12, fontWeight:600, color:'#94a3b8' }}>{matchedAddr}</span>
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={() => setEnlarged(true)} style={{
-            fontSize:11, color:'#94a3b8', border:'1px solid rgba(255,255,255,0.15)',
-            borderRadius:8, padding:'4px 10px', background:'transparent', cursor:'pointer' }}>⛶ Enlarge</button>
+            fontSize:11, color:'#22d3ee', border:'1px solid rgba(34,211,238,0.3)',
+            borderRadius:8, padding:'5px 12px', background:'rgba(34,211,238,0.07)', cursor:'pointer', fontWeight:600 }}>⛶ Enlarge</button>
           <button onClick={handleReset} style={{
-            fontSize:11, color:'#94a3b8', border:'1px solid rgba(255,255,255,0.15)',
-            borderRadius:8, padding:'4px 10px', background:'transparent', cursor:'pointer' }}>← New address</button>
+            fontSize:11, color:'#94a3b8', border:'1px solid rgba(255,255,255,0.12)',
+            borderRadius:8, padding:'5px 12px', background:'transparent', cursor:'pointer' }}>← New address</button>
         </div>
       </div>
 
-      {mapStatus && <p style={{ fontSize:11, color:'#64748b' }}>{mapStatus}</p>}
+      {/* 1. Filter buttons — always visible */}
       {categoryCounts.length > 0 && <FilterBar />}
 
-      <div id="ps-map" style={{ width:'100%', borderRadius:16, border:'2px solid rgba(34,211,238,0.3)', overflow:'hidden', height:420, minHeight:420 }} />
+      {/* 2. Map — always visible, never inside accordion */}
+      <div id="ps-map" style={{ width:'100%', borderRadius:16, border:'2px solid rgba(34,211,238,0.3)', overflow:'hidden', height:400, minHeight:400 }} />
 
+      {/* 3. Incident grid accordion — starts open, filters with map */}
+      {incidents.length > 0 && <IncidentAccordion />}
+
+      {/* Enlarged fullscreen */}
       {enlarged && (
         <div style={{ position:"fixed", inset:0, zIndex:50, display:"flex", flexDirection:"column", background:"#050d1f" }}>
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-700 flex-shrink-0">
-            <span className="text-sm font-medium text-slate-200">{matchedAddr}</span>
-            <button onClick={() => setEnlarged(false)} className="text-xs text-slate-400 hover:text-white border border-slate-700 rounded-lg px-3 py-1.5">✕ Close</button>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', background:'linear-gradient(135deg,#0f1f3d,#0a1628)', borderBottom:'1px solid rgba(34,211,238,0.15)', flexShrink:0 }}>
+            <span style={{ fontSize:13, fontWeight:600, color:'#f1f5f9' }}>{matchedAddr}</span>
+            <button onClick={() => setEnlarged(false)} style={{ fontSize:11, color:'#22d3ee', border:'1px solid rgba(34,211,238,0.3)', borderRadius:8, padding:'6px 14px', background:'rgba(34,211,238,0.08)', cursor:'pointer', fontWeight:700 }}>✕ Close</button>
           </div>
-          <div className="px-3 py-2 bg-slate-900 border-b border-slate-800 flex-shrink-0 overflow-x-auto">
+          <div style={{ padding:'10px 12px', background:'linear-gradient(135deg,#0f1f3d,#0a1628)', borderBottom:'1px solid rgba(34,211,238,0.10)', flexShrink:0, overflowX:'auto' }}>
             <FilterBar />
           </div>
-          <div id="ps-map-big" className="flex-1 w-full" />
+          <div id="ps-map-big" style={{ flex:1, width:'100%' }} />
         </div>
       )}
     </div>
