@@ -24,12 +24,19 @@ body {
   margin: 0;
 }
 
+/* ── Leaflet map container ──────────────────────────────────────
+   DO NOT set background here — it overrides the light OSM tiles.
+   Let the tile layer render its own background (white/grey).
+   Only set size and border-radius.
+───────────────────────────────────────────────────────────────── */
 .leaflet-container {
   width: 100% !important;
   height: 100% !important;
   border-radius: 16px;
-  background: #0a1628 !important;
+  /* background intentionally omitted — tiles handle their own bg */
 }
+
+/* Popup styling — keep dark card look for popups over the light map */
 .leaflet-popup-content-wrapper {
   background: #0f1f3d !important;
   color: #e2e8f0 !important;
@@ -38,6 +45,8 @@ body {
   box-shadow: 0 0 20px rgba(34,211,238,0.3) !important;
 }
 .leaflet-popup-tip { background: #0f1f3d !important; }
+
+/* Zoom controls */
 .leaflet-control-zoom a {
   background: #0f1f3d !important;
   color: #22d3ee !important;

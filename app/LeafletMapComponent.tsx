@@ -2,27 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-const GEOCODE_URL = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates';
-const MPD_URL     = 'https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0/query';
+const GEOCODE_URL  = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates';
 const RADIUS_MILES = 0.5;
 const WINDOW_DAYS  = 14;
-const CITY_SUFFIX  = ', Memphis, TN';
 
-// ─── Address helpers ──────────────────────────────────────────────────────────
-// User types "4128 Weymouth" — we slice it as needed internally.
-// Geocoder gets: "4128 Weymouth, Memphis, TN"
-// Warrant gets:  s=4128  st=Weymouth  (no extension — Macon not Macon Road)
-
-function splitAddress(raw: string) {
-  const parts = raw.trim().split(/\s+/);
-  return { num: parts[0] || '', name: parts.slice(1).join(' ') };
-}
-
-function warrantUrl(raw: string) {
-  const { num, name } = splitAddress(raw);
-  const st = name.split(/\s+/)[0]; // first word only
-  return `https://warrants.shelby-sheriff.org/w_warrant_result.php?w=&l=&f=&s=${encodeURIComponent(num)}&st=${encodeURIComponent(st)}`;
-}
+// CartoDB Positron — light, reliable, no popup warnings, global CDN
+const TILE_URL  = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
 // ─── UCR colors ───────────────────────────────────────────────────────────────
 
@@ -42,7 +28,7 @@ function getColor(cat: string): string {
   return UCR_COLORS.OTHER;
 }
 
-// ─── SVG icons ────────────────────────────────────────────────────────────────
+// ─── SVG crime icons ──────────────────────────────────────────────────────────
 
 function getIconSvg(cat: string): string {
   const color = getColor(cat);
@@ -97,18 +83,157 @@ function getIconSvg(cat: string): string {
 function meters(mi: number) { return mi * 1609.344; }
 function fmtDate(ms: number | null) { return ms ? new Date(ms).toLocaleString() : ''; }
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface Incident {
   attributes: {
     Offense_Datetime: number | null;
-    UCR_Category: string; UCR_Description: string;
-    Street_Address: string; Latitude: number; Longitude: number; Crime_ID: string;
+    UCR_Category: string;
+    UCR_Description: string;
+    Street_Address: string;
+    Latitude: number;
+    Longitude: number;
+    Crime_ID: string;
   };
 }
+
 interface GeoResult { lat: number; lon: number; label: string; }
+
+// ─── Crime query router ───────────────────────────────────────────────────────
+// Normalises results from ESRI FeatureServer, UK Police API, and others
+// into our standard Incident[] shape.
+
+async function fetchCrimes(
+  esriLayer: string,
+  crimeField: string,
+  lat: number,
+  lon: number,
+): Promise<Incident[]> {
+
+  const radiusMeters = meters(RADIUS_MILES);
+  const end   = Date.now();
+  const start = end - WINDOW_DAYS * 86400000;
+
+  // ── UK Police API ────────────────────────────────────────────────────────
+  if (esriLayer.startsWith('uk-police:')) {
+    const force = esriLayer.split(':')[1];
+    const month = new Date(end).toISOString().slice(0, 7); // YYYY-MM
+    try {
+      const url = `https://data.police.uk/api/crimes-street/all-crime?lat=${lat}&lng=${lon}&date=${month}`;
+      const r = await fetch(url);
+      const j = await r.json();
+      if (!Array.isArray(j)) return [];
+      return j.slice(0, 200).map((c: any, i: number) => ({
+        attributes: {
+          Offense_Datetime: null,
+          UCR_Category: (c.category || 'OTHER').replace(/-/g, ' ').toUpperCase(),
+          UCR_Description: c.category || '',
+          Street_Address: c.location?.street?.name || '',
+          Latitude: parseFloat(c.location?.latitude) || lat,
+          Longitude: parseFloat(c.location?.longitude) || lon,
+          Crime_ID: c.id ? String(c.id) : String(i),
+        },
+      }));
+    } catch { return []; }
+  }
+
+  // ── Socrata / JSON endpoints — show link-only (no map markers) ────────────
+  if (esriLayer.startsWith('socrata:') || esriLayer.startsWith('bocsar:') ||
+      esriLayer.startsWith('csa:')     || esriLayer.startsWith('nz-police:')) {
+    return []; // These need server-side proxying; return empty for now
+  }
+
+  // ── ESRI FeatureServer (most US/Canada/Mexico cities) ────────────────────
+  if (esriLayer.startsWith('https://')) {
+    const base = esriLayer.endsWith('/query') ? esriLayer : `${esriLayer}/query`;
+    try {
+      const params = new URLSearchParams({
+        where: '1=1',
+        geometry: `${lon},${lat}`,
+        geometryType: 'esriGeometryPoint',
+        inSR: '4326',
+        distance: String(radiusMeters),
+        units: 'esriSRUnit_Meter',
+        outFields: '*',
+        orderByFields: 'OBJECTID DESC',
+        resultRecordCount: '200',
+        returnGeometry: 'true',
+        time: `${start},${end}`,
+        f: 'json',
+      });
+      const r   = await fetch(`${base}?${params}`);
+      const j   = await r.json();
+      if (j.error) throw new Error(j.error.message);
+      const features: any[] = j.features || [];
+
+      // Normalise field names — different cities use different schemas
+      return features.map((f: any, i: number) => {
+        const a = f.attributes || {};
+        const g = f.geometry || {};
+
+        // Crime category — try crimeField first, then common aliases
+        const catRaw = a[crimeField]
+          || a['UCR_Category'] || a['offense_type_id'] || a['TypeText']
+          || a['primary_type'] || a['OFFENSE'] || a['offense_type']
+          || a['TYPE'] || a['CRIME_TYPE'] || a['CATEGORY']
+          || a['UC2_Literal'] || a['MCI_CATEGORY'] || a['delito']
+          || a['Crm Cd Desc'] || a['Highest NIBRS']
+          || a['OFFENSE_CATEGORY'] || a['OFFENSE_DESCRIPTION']
+          || a['text_general_code'] || a['offence_type']
+          || a['UCR_CRIME_CATEGORY'] || a['crime_type']
+          || a['Description'] || a['anzsoc_division']
+          || 'OTHER';
+
+        // Date — try common date field names
+        const dateRaw = a['Offense_Datetime'] || a['FIRST_OCCURRENCE_DATE']
+          || a['date_occ'] || a['date'] || a['START_DATE'] || a['Date']
+          || a['reported_date'] || a['occurred_on_date'] || a['dateTime']
+          || null;
+        const dateMs = dateRaw
+          ? (typeof dateRaw === 'number' ? dateRaw : new Date(dateRaw).getTime())
+          : null;
+
+        // Address
+        const addr = a['Street_Address'] || a['INCIDENT_ADDRESS']
+          || a['location_1'] || a['block'] || a['BLOCK']
+          || a['address'] || a['ADDRESS'] || a['LOCATION']
+          || a['location'] || a['street_name'] || '';
+
+        // Coordinates — from geometry or attribute fields
+        const lat2 = g.y || g.lat || a['Latitude'] || a['LAT'] || a['latitude'] || lat;
+        const lon2 = g.x || g.lon || a['Longitude'] || a['LON'] || a['longitude'] || lon;
+
+        return {
+          attributes: {
+            Offense_Datetime: isNaN(dateMs as number) ? null : dateMs,
+            UCR_Category: String(catRaw || 'OTHER').trim().toUpperCase(),
+            UCR_Description: String(catRaw || '').trim(),
+            Street_Address: String(addr || '').trim(),
+            Latitude: typeof lat2 === 'number' ? lat2 : parseFloat(lat2) || lat,
+            Longitude: typeof lon2 === 'number' ? lon2 : parseFloat(lon2) || lon,
+            Crime_ID: String(a['Crime_ID'] || a['OBJECTID'] || a['incident_id'] || i),
+          },
+        };
+      });
+    } catch { return []; }
+  }
+
+  return [];
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?: string }) {
+export default function LeafletMapComponent({
+  lockedAddress,
+  citySuffix = ', Memphis, TN',
+  esriLayer  = 'https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0',
+  crimeField = 'UCR_Category',
+}: {
+  lockedAddress?: string;
+  citySuffix?:    string;
+  esriLayer?:     string;
+  crimeField?:    string;
+}) {
   const [address,        setAddress]        = useState('');
   const [inputStatus,    setInputStatus]    = useState('');
   const [loading,        setLoading]        = useState(false);
@@ -119,6 +244,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
   const [activeFilter,   setActiveFilter]   = useState<string | null>(null);
   const [mapStatus,      setMapStatus]      = useState('');
   const [enlarged,       setEnlarged]       = useState(false);
+  const [noApiNote,      setNoApiNote]      = useState('');
 
   const mapRef        = useRef<any>(null);
   const bigMapRef     = useRef<any>(null);
@@ -126,6 +252,30 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
   const bigMarkersRef = useRef<any[]>([]);
   const geoRef        = useRef<GeoResult | null>(null);
   const LRef          = useRef<any>(null);
+
+  // ── Hard reset whenever city changes ─────────────────────────────────────
+  useEffect(() => {
+    hardReset();
+  }, [citySuffix, esriLayer]);
+
+  function hardReset() {
+    if (mapRef.current)    { try { mapRef.current.remove();    } catch {} mapRef.current    = null; }
+    if (bigMapRef.current) { try { bigMapRef.current.remove(); } catch {} bigMapRef.current = null; }
+    markersRef.current = [];
+    bigMarkersRef.current = [];
+    geoRef.current = null;
+    setStage('input');
+    setAddress('');
+    setMatchedAddr('');
+    setInputStatus('');
+    setIncidents([]);
+    setCategoryCounts([]);
+    setActiveFilter(null);
+    setMapStatus('');
+    setEnlarged(false);
+    setNoApiNote('');
+    setLoading(false);
+  }
 
   function buildMarkers(L: any, map: any, store: any[]) {
     if (!geoRef.current) return;
@@ -136,7 +286,13 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       if (typeof a.Latitude !== 'number' || typeof a.Longitude !== 'number') continue;
       const cat = (a.UCR_Category || 'OTHER').trim();
       const marker = L.marker([a.Latitude, a.Longitude], {
-        icon: L.divIcon({ html: getIconSvg(cat), className: '', iconSize: [30,30], iconAnchor: [15,15], popupAnchor: [0,-18] }),
+        icon: L.divIcon({
+          html: getIconSvg(cat),
+          className: '',
+          iconSize: [30, 30],
+          iconAnchor: [15, 15],
+          popupAnchor: [0, -18],
+        }),
       });
       (marker as any)._category = cat;
       (marker as any)._crimeId  = a.Crime_ID;
@@ -152,8 +308,10 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       bounds.extend([a.Latitude, a.Longitude]);
       store.push(marker);
     }
-    map.fitBounds(bounds.pad(0.15), { maxZoom: 16 });
-    if (map.getZoom() < 13) map.setZoom(13);
+    if (store.length > 0) {
+      map.fitBounds(bounds.pad(0.15), { maxZoom: 16 });
+      if (map.getZoom() < 13) map.setZoom(13);
+    }
   }
 
   // ── Init small map ──────────────────────────────────────────────────────
@@ -165,11 +323,11 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
       LRef.current = L;
       if (cancelled || !geoRef.current) return;
       const { lat, lon } = geoRef.current;
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+      if (mapRef.current) { try { mapRef.current.remove(); } catch {} mapRef.current = null; }
       markersRef.current = [];
       const map = L.map('ps-map').setView([lat, lon], 14);
       mapRef.current = map;
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR, subdomains: 'abcd' }).addTo(map);
       const homeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
         <path d="M19 2 C10.16 2 3 9.16 3 18 C3 30 19 46 19 46 C19 46 35 30 35 18 C35 9.16 27.84 2 19 2Z"
@@ -182,7 +340,11 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
         icon: L.divIcon({ html: homeSvg, className: '', iconSize: [38,48], iconAnchor: [19,46], popupAnchor: [0,-44] }),
         zIndexOffset: 1000,
       }).addTo(map).bindPopup(`<div style="font-size:13px;font-weight:700;color:#1e3a5f">📍 ${geoRef.current.label}</div>`);
-      L.circle([lat, lon], { radius: meters(RADIUS_MILES), color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '4 4' }).addTo(map);
+      L.circle([lat, lon], {
+        radius: meters(RADIUS_MILES),
+        color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05,
+        weight: 1.5, dashArray: '4 4',
+      }).addTo(map);
       buildMarkers(L, map, markersRef.current);
       setMapStatus(`${incidents.length} incidents — tap a category to filter`);
     }
@@ -196,11 +358,11 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     const L = LRef.current;
     const { lat, lon } = geoRef.current;
     setTimeout(() => {
-      if (bigMapRef.current) { bigMapRef.current.remove(); bigMapRef.current = null; }
+      if (bigMapRef.current) { try { bigMapRef.current.remove(); } catch {} bigMapRef.current = null; }
       bigMarkersRef.current = [];
       const map = L.map('ps-map-big').setView([lat, lon], 14);
       bigMapRef.current = map;
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR, subdomains: 'abcd' }).addTo(map);
       const homeSvg2 = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <filter id="ds2"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
         <path d="M19 2 C10.16 2 3 9.16 3 18 C3 30 19 46 19 46 C19 46 35 30 35 18 C35 9.16 27.84 2 19 2Z"
@@ -213,13 +375,17 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
         icon: L.divIcon({ html: homeSvg2, className: '', iconSize: [38,48], iconAnchor: [19,46], popupAnchor: [0,-44] }),
         zIndexOffset: 1000,
       }).addTo(map).bindPopup(`<div style="font-size:13px;font-weight:700;color:#1e3a5f">📍 ${geoRef.current!.label}</div>`);
-      L.circle([lat, lon], { radius: meters(RADIUS_MILES), color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '4 4' }).addTo(map);
+      L.circle([lat, lon], {
+        radius: meters(RADIUS_MILES),
+        color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05,
+        weight: 1.5, dashArray: '4 4',
+      }).addTo(map);
       buildMarkers(L, map, bigMarkersRef.current);
     }, 100);
-    return () => { if (bigMapRef.current) { bigMapRef.current.remove(); bigMapRef.current = null; } };
+    return () => { if (bigMapRef.current) { try { bigMapRef.current.remove(); } catch {} bigMapRef.current = null; } };
   }, [enlarged, incidents]);
 
-  // ── Filter ───────────────────────────────────────────────────────────────
+  // ── Filter ────────────────────────────────────────────────────────────────
   useEffect(() => {
     for (const { map, markers } of [
       { map: mapRef.current,    markers: markersRef.current },
@@ -240,51 +406,55 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     );
   }, [activeFilter]);
 
-  // ── Auto-fire when lockedAddress prop arrives from page.tsx ─────────────
+  // ── Auto-fire when lockedAddress prop arrives ─────────────────────────────
   useEffect(() => {
     if (!lockedAddress?.trim()) return;
     setAddress(lockedAddress.trim());
     runSearch(lockedAddress.trim());
   }, [lockedAddress]);
 
-  // ── Search ────────────────────────────────────────────────────────────────
+  // ── Search ─────────────────────────────────────────────────────────────────
   async function runSearch(raw: string) {
     if (!raw) { setInputStatus('Enter an address.'); return; }
     setLoading(true);
     setInputStatus('Geocoding…');
+    setNoApiNote('');
 
+    // Geocode
     let geo: GeoResult;
     try {
-      const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(raw + CITY_SUFFIX)}&maxLocations=1&outFields=*&f=pjson`;
+      const suffix = citySuffix.startsWith(',') ? citySuffix : `, ${citySuffix}`;
+      const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(raw + suffix)}&maxLocations=1&outFields=*&f=pjson`;
       const r = await fetch(url);
       const j = await r.json();
       if (!j.candidates?.length) throw new Error('Address not found.');
-      geo = { lat: j.candidates[0].location.y, lon: j.candidates[0].location.x, label: j.candidates[0].address };
+      geo = {
+        lat:   j.candidates[0].location.y,
+        lon:   j.candidates[0].location.x,
+        label: j.candidates[0].address,
+      };
     } catch (e: any) { setInputStatus(e.message); setLoading(false); return; }
 
-    setInputStatus('Querying MPD…');
-    let rawIncidents: Incident[];
-    try {
-      const end = Date.now(), start = end - WINDOW_DAYS * 86400000;
-      const params = new URLSearchParams({
-        where: '1=1', geometry: `${geo.lon},${geo.lat}`,
-        geometryType: 'esriGeometryPoint', inSR: '4326',
-        distance: String(meters(RADIUS_MILES)), units: 'esriSRUnit_Meter',
-        outFields: 'Offense_Datetime,UCR_Category,UCR_Description,Street_Address,Latitude,Longitude,Crime_ID',
-        orderByFields: 'Offense_Datetime DESC', resultRecordCount: '200',
-        returnGeometry: 'false', time: `${start},${end}`, f: 'json',
-      });
-      const r = await fetch(`${MPD_URL}?${params}`);
-      const j = await r.json();
-      if (j.error) throw new Error(j.error.message || 'MPD query failed');
-      rawIncidents = j.features || [];
-    } catch (e: any) { setInputStatus(`MPD failed: ${e.message}`); setLoading(false); return; }
+    // Fetch crimes via router
+    setInputStatus('Fetching crime data…');
+    let rawIncidents: Incident[] = [];
+
+    // Check if this city has no direct API support
+    const noApi = esriLayer.startsWith('socrata:') || esriLayer.startsWith('bocsar:') ||
+                  esriLayer.startsWith('csa:')     || esriLayer.startsWith('nz-police:');
+
+    if (noApi) {
+      setNoApiNote(`⚠ Crime data for this city uses a web portal that requires server-side access. The map will show your address but no crime markers. Warrant and jail links still work.`);
+    } else {
+      rawIncidents = await fetchCrimes(esriLayer, crimeField, geo.lat, geo.lon);
+    }
 
     const counts: Record<string, number> = {};
     for (const f of rawIncidents) {
       const cat = (f.attributes?.UCR_Category || 'OTHER').trim();
       counts[cat] = (counts[cat] || 0) + 1;
     }
+
     geoRef.current = geo;
     setMatchedAddr(geo.label);
     setIncidents(rawIncidents);
@@ -294,17 +464,11 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     setStage('map');
   }
 
-  const handleSearch = useCallback(() => runSearch(address.trim()), [address]);
+  const handleSearch = useCallback(() => runSearch(address.trim()), [address, citySuffix, esriLayer]);
 
-  const handleReset = useCallback(() => {
-    if (mapRef.current)    { mapRef.current.remove();    mapRef.current    = null; }
-    if (bigMapRef.current) { bigMapRef.current.remove(); bigMapRef.current = null; }
-    markersRef.current = []; bigMarkersRef.current = []; geoRef.current = null;
-    setStage('input'); setInputStatus(''); setIncidents([]);
-    setCategoryCounts([]); setActiveFilter(null); setMapStatus(''); setEnlarged(false);
-  }, []);
+  const handleReset = useCallback(() => { hardReset(); }, []);
 
-  // ── Filter bar ────────────────────────────────────────────────────────────
+  // ── Filter bar ─────────────────────────────────────────────────────────────
   function FilterBar() {
     const btnBase: React.CSSProperties = {
       display:'inline-flex', alignItems:'center', gap:5,
@@ -318,13 +482,11 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
 
     return (
       <div>
-        {/* Summary line */}
         <p style={{ fontSize:12, color:'#94a3b8', fontWeight:600, margin:'0 0 10px',
           padding:'6px 10px', background:'rgba(34,211,238,0.06)',
           borderRadius:10, border:'1px solid rgba(34,211,238,0.12)' }}>
           {activeLabel}
         </p>
-        {/* All button */}
         <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:8 }}>
           <button onClick={() => setActiveFilter(null)} style={{
             ...btnBase,
@@ -339,13 +501,9 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
               borderRadius:10, padding:'1px 7px', fontSize:10, fontWeight:800,
             }}>{incidents.length}</span>
           </button>
-
-          {/* Category buttons */}
           {categoryCounts.map(([cat, count]) => {
-            const color = getColor(cat);
+            const color    = getColor(cat);
             const isActive = activeFilter === cat;
-            // Assign a lavender tint to non-active buttons for variety
-            const lavender = '#a855f7';
             return (
               <button key={cat} onClick={() => setActiveFilter(isActive ? null : cat)} style={{
                 ...btnBase,
@@ -354,7 +512,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
                 color: isActive ? color : '#c4b5fd',
                 boxShadow: isActive ? `0 2px 10px ${color}44` : 'none',
               }}>
-                <span style={{ width:7, height:7, borderRadius:'50%', background: isActive ? color : lavender, flexShrink:0, display:'inline-block' }}/>
+                <span style={{ width:7, height:7, borderRadius:'50%', background: isActive ? color : '#a855f7', flexShrink:0, display:'inline-block' }}/>
                 {cat}
                 <span style={{
                   background: isActive ? color + '33' : 'rgba(168,85,247,0.2)',
@@ -369,7 +527,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     );
   }
 
-  // ── Render: input ─────────────────────────────────────────────────────────
+  // ── Render: input ──────────────────────────────────────────────────────────
   if (stage === 'input') {
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -377,7 +535,7 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
         <div style={{ display:'flex', gap:8 }}>
           <input
             type="text"
-            placeholder="4128 Weymouth"
+            placeholder="Enter address"
             value={address}
             onChange={e => setAddress(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
@@ -400,19 +558,18 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     );
   }
 
-  // ── Fly map to incident ───────────────────────────────────────────────────
+  // ── Fly map to incident ────────────────────────────────────────────────────
   function flyToIncident(crimeId: string, lat: number, lng: number) {
     const map = mapRef.current;
     if (!map) return;
     map.flyTo([lat, lng], 17, { animate: true, duration: 0.8 });
     const marker = markersRef.current.find(m => (m as any)._crimeId === crimeId);
     if (marker) setTimeout(() => marker.openPopup(), 850);
-    // Scroll map into view
     const el = document.getElementById('ps-map');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  // ── Incident grid accordion ───────────────────────────────────────────────
+  // ── Incident list accordion ───────────────────────────────────────────────
   function IncidentAccordion() {
     const [open, setOpen] = useState(true);
     const filtered = activeFilter
@@ -430,29 +587,22 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
         overflow:'hidden',
         boxShadow: open ? '0 4px 24px rgba(34,211,238,0.10)' : '0 4px 24px rgba(0,0,0,0.35)',
       }}>
-        {/* Accordion header */}
         <button onClick={() => setOpen(o => !o)} style={{
           width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
           padding:'14px 16px',
           background: open ? 'rgba(34,211,238,0.06)' : 'transparent',
           border:'none', cursor:'pointer', textAlign:'left',
         }}>
-          <span style={{ fontSize:13, fontWeight:700, color:'#f1f5f9' }}>
-            📋 {label}
-          </span>
+          <span style={{ fontSize:13, fontWeight:700, color:'#f1f5f9' }}>📋 {label}</span>
           <span style={{
             display:'inline-flex', alignItems:'center', justifyContent:'center',
             width:32, height:32, borderRadius:'50%',
-            background: open
-              ? 'linear-gradient(135deg,#22d3ee,#3b82f6)'
-              : 'linear-gradient(135deg,#a855f7,#7c3aed)',
+            background: open ? 'linear-gradient(135deg,#22d3ee,#3b82f6)' : 'linear-gradient(135deg,#a855f7,#7c3aed)',
             color:'white', fontSize:20, fontWeight:900, lineHeight:1,
             boxShadow: open ? '0 0 12px rgba(34,211,238,0.5)' : '0 0 12px rgba(168,85,247,0.5)',
             flexShrink:0,
           }}>{open ? '−' : '+'}</span>
         </button>
-
-        {/* Incident grid */}
         {open && (
           <div style={{ padding:'4px 12px 14px', borderTop:'1px solid rgba(34,211,238,0.12)' }}>
             {filtered.length === 0 ? (
@@ -482,15 +632,11 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
                       onMouseEnter={e => { if (hasCoords) (e.currentTarget as HTMLDivElement).style.background = `${color}15`; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)'; }}
                     >
-                      {/* Pin icon */}
-                      {hasCoords && (
-                        <span style={{ fontSize:12, flexShrink:0, opacity:0.8 }}>📍</span>
-                      )}
-                      {/* Address */}
+                      {hasCoords && <span style={{ fontSize:12, flexShrink:0, opacity:0.8 }}>📍</span>}
                       <span style={{ flex:1, fontSize:11, color:'#e2e8f0', fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                         {a.Street_Address || '—'}
                       </span>
-                      {/* Date */}
+                      <span style={{ fontSize:10, color:'#94a3b8', flexShrink:0, marginLeft:4 }}>{cat}</span>
                       <span style={{ fontSize:10, color:'#475569', flexShrink:0 }}>{date}</span>
                     </div>
                   );
@@ -503,11 +649,11 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     );
   }
 
-  // ── Render: map ───────────────────────────────────────────────────────────
+  // ── Render: map ────────────────────────────────────────────────────────────
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
 
-      {/* Top row: address + controls */}
+      {/* Top row */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
         <span style={{ fontSize:12, fontWeight:600, color:'#94a3b8' }}>{matchedAddr}</span>
         <div style={{ display:'flex', gap:8 }}>
@@ -520,13 +666,20 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
         </div>
       </div>
 
-      {/* 1. Filter buttons — always visible */}
+      {/* No-API notice */}
+      {noApiNote && (
+        <div style={{ padding:'10px 14px', borderRadius:12, background:'rgba(245,158,11,0.1)', border:'1px solid rgba(245,158,11,0.3)', fontSize:11, color:'#fbbf24', lineHeight:1.5 }}>
+          {noApiNote}
+        </div>
+      )}
+
+      {/* Filter buttons */}
       {categoryCounts.length > 0 && <FilterBar />}
 
-      {/* 2. Map — always visible, never inside accordion */}
+      {/* Map */}
       <div id="ps-map" style={{ width:'100%', borderRadius:16, border:'2px solid rgba(34,211,238,0.3)', overflow:'hidden', height:400, minHeight:400 }} />
 
-      {/* 3. Incident grid accordion — starts open, filters with map */}
+      {/* Incident list */}
       {incidents.length > 0 && <IncidentAccordion />}
 
       {/* Enlarged fullscreen */}
@@ -545,4 +698,3 @@ export default function LeafletMapComponent({ lockedAddress }: { lockedAddress?:
     </div>
   );
 }
-
