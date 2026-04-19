@@ -1,3 +1,7 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // WHERE IT WORKS — Nested sub-accordion city selector
 //
@@ -488,3 +492,4 @@ function WhereItWorks({
     </Section>
   );
 }
+
