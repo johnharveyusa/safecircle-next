@@ -432,7 +432,7 @@ function WhereItWorks({
   const [openCountry, setOpenCountry] = useState('');
 
   return (
-    <Section title={`🌎  Where It Works — ${selectedCity.flag || '📍'} ${selectedCity.name} active`} dark={true}>
+    <section title={`🌎  Where It Works — ${selectedCity.flag || '📍'} ${selectedCity.name} active`} dark={true}>
       <p style={{ fontSize: 11, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
         Select your city to set the crime map, geocoder, warrant links, and address bar.
         Your selection is saved for next time. ✅ = full API · ~ = web form link
@@ -489,7 +489,10 @@ function WhereItWorks({
         Modules 3–7 (sex offenders, nearest services, circle/SOS, GPS, panic) work in every city with no changes.
         Selecting a city clears your current address for a fresh start.
       </p>
-    </Section>
+    </section>
   );
 }
+
+
+
 
