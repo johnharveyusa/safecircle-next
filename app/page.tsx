@@ -29,14 +29,14 @@ function warrantUrl(raw: string, city: CityConfig) {
   return city.warrantUrl;
 }
 function offenderUrl(raw: string) {
-  return `https://www.nsopw.gov/en/Search/Results?street=${encodeURIComponent(raw.trim() + ', Memphis, TN')}`;
+  return `https://www.nsopw.gov/en/Search/Results?street=${encodeURIComponent(raw.trim())}`;
 }
 function directionsUrl(destination: string) {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
 }
-async function geocodeAddress(raw: string) {
+async function geocodeAddress(raw: string, suffix: string) {
   try {
-    const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(raw + ', ' + selectedCity.geocodeSuffix)}&maxLocations=1&outFields=*&f=pjson`;
+    const url = `${GEOCODE_URL}?SingleLine=${encodeURIComponent(raw + ', ' + suffix)}&maxLocations=1&outFields=*&f=pjson`;
     const r = await fetch(url);
     const j = await r.json();
     if (!j.candidates?.length) return null;
@@ -176,11 +176,10 @@ function TrackingMap({ watcherLat, watcherLng, sessions }: {
       const map = L.map('tracking-map').setView([watcherLat!, watcherLng!], 13);
       mapRef.current = map;
 
-      // CartoDB dark tiles — same as crime map, no referer issues
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 20,
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        subdomains: 'abcd',
+      // OSM light tiles — bright, clean, no referer issues on Railway
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
 
       // Watcher's own pulsing blue dot
@@ -578,7 +577,7 @@ function AlertsTab({ contacts, address }: { contacts: Contact[]; address: string
     const locStr = gpsCoords
       ? `GPS: https://maps.google.com/?q=${gpsCoords.lat},${gpsCoords.lng}`
       : 'GPS unavailable';
-    const addrStr = address ? `Address: ${address}, Memphis TN` : '';
+    const addrStr = address ? `Address: ${address}` : '';
     const body = `🚨 SAFECIRCLE EMERGENCY ALERT 🚨\n\nI NEED IMMEDIATE HELP.\n\n${addrStr}\n${locStr}\n\nPlease call me or send help NOW.`;
     for (const c of contacts) {
       if (c.email) window.open(`mailto:${c.email}?subject=${encodeURIComponent('🚨 SAFECIRCLE — EMERGENCY HELP NEEDED NOW')}&body=${encodeURIComponent(body)}`, '_blank');
@@ -695,7 +694,7 @@ function AlertsTab({ contacts, address }: { contacts: Contact[]; address: string
       <div style={{ borderRadius:20, border:'1px solid rgba(34,211,238,0.18)', background:'linear-gradient(135deg,#0f1f3d,#0a1628)', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.35)' }}>
         <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(34,211,238,0.10)' }}>
           <p style={{ fontSize:14, fontWeight:700, color:'#f1f5f9', margin:0 }}>🛡 Safety Check-In</p>
-          {address && <p style={{ fontSize:11, color:'#475569', margin:0 }}>📍 {address}, Memphis TN</p>}
+          {address && <p style={{ fontSize:11, color:'#475569', margin:0 }}>📍 {address}</p>}
         </div>
         <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:14 }}>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
@@ -1032,7 +1031,7 @@ type TabId = 'main' | 'tracking' | 'alerts' | 'panic' | 'howto';
 
 // ── City config type ──────────────────────────────────────────────────────────
 
-export interface CityConfig {
+interface CityConfig {
   id: string;
   name: string;
   state: string;
@@ -1054,7 +1053,7 @@ export interface CityConfig {
 
 // ── City configs ──────────────────────────────────────────────────────────────
 
-export const CITY_CONFIGS: CityConfig[] = [
+const CITY_CONFIGS: CityConfig[] = [
   // ── United States ──────────────────────────────────────────────────────────
   { id:'memphis',       name:'Memphis',        state:'TN', country:'US',
     lat:35.1495, lng:-90.0490, zoom:13, geocodeSuffix:'Memphis, TN',
@@ -1295,14 +1294,16 @@ const COUNTRY_GROUPS = [
 // ── Sub-accordion ─────────────────────────────────────────────────────────────
 
 function CountryGroup({
-  flag, label, cities, selectedCity, onSelect, openKey, setOpenKey
+  flag, label, cities, selectedCity, originCity, onSelect, openKey, setOpenKey
 }: {
   flag: string; label: string; cities: CityConfig[];
-  selectedCity: CityConfig; onSelect: (c: CityConfig) => void;
+  selectedCity: CityConfig; originCity: CityConfig;
+  onSelect: (c: CityConfig) => void;
   openKey: string; setOpenKey: (k: string) => void;
 }) {
-  const isOpen = openKey === label;
+  const isOpen      = openKey === label;
   const hasSelected = cities.some(c => c.id === selectedCity.id);
+  const hasOrigin   = cities.some(c => c.id === originCity.id);
 
   return (
     <div style={{
@@ -1311,7 +1312,9 @@ function CountryGroup({
         ? '1px solid rgba(34,211,238,0.35)'
         : hasSelected
           ? '1px solid rgba(16,185,129,0.4)'
-          : '1px solid rgba(255,255,255,0.07)',
+          : hasOrigin
+            ? '1px solid rgba(245,158,11,0.3)'
+            : '1px solid rgba(255,255,255,0.07)',
       background: isOpen ? 'rgba(34,211,238,0.04)' : 'rgba(255,255,255,0.02)',
       overflow: 'hidden',
       marginBottom: 8,
@@ -1337,7 +1340,13 @@ function CountryGroup({
             <span style={{
               fontSize: 10, padding: '2px 7px', borderRadius: 20,
               background: 'rgba(16,185,129,0.15)', color: '#10b981',
-            }}>✓ selected</span>
+            }}>✓ active</span>
+          )}
+          {hasOrigin && !hasSelected && (
+            <span style={{
+              fontSize: 10, padding: '2px 7px', borderRadius: 20,
+              background: 'rgba(245,158,11,0.15)', color: '#f59e0b',
+            }}>🏠 home</span>
           )}
         </div>
         <span style={{
@@ -1351,27 +1360,32 @@ function CountryGroup({
         <div style={{ padding: '0 10px 12px' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 7 }}>
             {cities.map(city => {
-              const active = city.id === selectedCity.id;
+              const active  = city.id === selectedCity.id;
+              const isHome  = city.id === originCity.id;
               return (
                 <button
                   key={city.id}
                   onClick={() => onSelect(city)}
                   style={{
                     padding: '7px 13px', borderRadius: 20, fontSize: 12,
-                    fontWeight: active ? 700 : 500, cursor: 'pointer',
+                    fontWeight: active || isHome ? 700 : 500, cursor: 'pointer',
                     border: active
                       ? '1px solid rgba(16,185,129,0.6)'
-                      : '1px solid rgba(34,211,238,0.2)',
+                      : isHome
+                        ? '2px solid rgba(245,158,11,0.7)'
+                        : '1px solid rgba(34,211,238,0.2)',
                     background: active
                       ? 'linear-gradient(90deg,#10b981,#059669)'
-                      : 'rgba(255,255,255,0.04)',
-                    color: active ? 'white' : '#94a3b8',
+                      : isHome
+                        ? 'rgba(245,158,11,0.12)'
+                        : 'rgba(255,255,255,0.04)',
+                    color: active ? 'white' : isHome ? '#fbbf24' : '#94a3b8',
                     touchAction: 'manipulation',
                     WebkitTapHighlightColor: 'transparent',
                     transition: 'all 0.15s',
                   }}
                 >
-                  {active ? '✓ ' : ''}{city.name}
+                  {active ? '✓ ' : isHome && !active ? '🏠 ' : ''}{city.name}
                   {city.state ? `, ${city.state}` : ''}
                   <span style={{
                     marginLeft: 5, fontSize: 10,
@@ -1392,14 +1406,14 @@ function CountryGroup({
               border: '1px solid rgba(16,185,129,0.2)',
             }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: '#10b981', margin: '0 0 6px' }}>
-                ✓ {selectedCity.name} is your active city
+                ✓ {selectedCity.name} active — all data fresh for this city
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
                 {[
                   ['Crime data', selectedCity.esriLayer.startsWith('http') ? 'ESRI FeatureServer' : selectedCity.esriLayer.split(':')[0].toUpperCase()],
                   ['Updates', selectedCity.updateFreq],
                   ['Warrants', selectedCity.warrantNote || 'Sheriff website'],
-                  ['Geocoder suffix', selectedCity.geocodeSuffix],
+                  ['Geocoder', selectedCity.geocodeSuffix],
                 ].map(([k, v]) => (
                   <div key={k}>
                     <span style={{ fontSize: 10, color: '#475569' }}>{k}: </span>
@@ -1418,15 +1432,16 @@ function CountryGroup({
 // ── Main WhereItWorks component ───────────────────────────────────────────────
 
 function WhereItWorks({
-  onCitySelect, selectedCity
+  onCitySelect, selectedCity, originCity
 }: {
   onCitySelect: (city: CityConfig) => void;
   selectedCity: CityConfig;
+  originCity: CityConfig;
 }) {
   const [openCountry, setOpenCountry] = useState('');
 
   return (
-    <Section title={`🌎  Where It Works — ${selectedCity.flag || '📍'} ${selectedCity.name} active`} dark={true}>
+    <Section title={`🌎  Where It Works — ${selectedCity.name} active`} dark={true}>
       <p style={{ fontSize: 11, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
         Select your city to set the crime map, geocoder, warrant links, and address bar.
         Your selection is saved for next time. ✅ = full API · ~ = web form link
@@ -1460,6 +1475,7 @@ function WhereItWorks({
           label={group.label}
           cities={group.cities}
           selectedCity={selectedCity}
+          originCity={originCity}
           onSelect={city => {
             onCitySelect(city);
             setOpenCountry('');
@@ -1510,37 +1526,85 @@ export default function SafeCirclePage() {
   }
 
   // Address — persisted across refreshes
-  const [selectedCity, setSelectedCity] = useState<CityConfig>(() => {
+  // Safe server defaults — hydrated from localStorage in useEffect below
+  const [selectedCity, setSelectedCity] = useState<CityConfig>(CITY_CONFIGS[0]);
+  const [originCity,   setOriginCity]   = useState<CityConfig>(CITY_CONFIGS[0]);
+
+  // Ref for auto-focusing address input after city change
+  const addressInputRef = useRef<HTMLInputElement>(null);
+
+  // Hydrate city state from localStorage after mount (fixes Next.js hydration error)
+  useEffect(() => {
     try {
-      const s = typeof window !== 'undefined' ? localStorage.getItem('sc_city') : null;
-      return s ? JSON.parse(s) : CITY_CONFIGS[0];
-    } catch { return CITY_CONFIGS[0]; }
-  });
+      const sc = localStorage.getItem('sc_city');
+      if (sc) setSelectedCity(JSON.parse(sc));
+      const oc = localStorage.getItem('sc_origin_city');
+      if (oc) setOriginCity(JSON.parse(oc));
+    } catch {}
+  }, []);
 
   function handleCitySelect(city: CityConfig) {
+    // Save origin city + address the first time someone leaves it
+    try {
+      if (!localStorage.getItem('sc_origin_city')) {
+        const currentCity = JSON.parse(localStorage.getItem('sc_city') || 'null') || CITY_CONFIGS[0];
+        const currentAddr = localStorage.getItem('sc_address') || '';
+        localStorage.setItem('sc_origin_city', JSON.stringify(currentCity));
+        localStorage.setItem('sc_origin_address', currentAddr);
+        setOriginCity(currentCity);
+      }
+    } catch {}
+
+    const isReturningHome = city.id === originCity.id;
+
+    // Switch city and clear ALL previous data immediately
     setSelectedCity(city);
-    setAddress('');
     setAddrSet(false);
     setGeoLabel('');
     lastGeoRef.current = '';
     setServices({ police: null, fire: null, hospital: null });
+
+    // If returning home, restore saved home address — otherwise clear it
     try {
+      if (isReturningHome) {
+        const homeAddr = localStorage.getItem('sc_origin_address') || '';
+        setAddress(homeAddr);
+        localStorage.setItem('sc_address', homeAddr);
+      } else {
+        setAddress('');
+        localStorage.removeItem('sc_address');
+      }
       localStorage.setItem('sc_city', JSON.stringify(city));
-      localStorage.removeItem('sc_address');
       localStorage.removeItem('sc_addrSet');
       localStorage.removeItem('sc_geoLabel');
     } catch {}
+
+    // Auto-focus and scroll to address input
+    setTimeout(() => {
+      addressInputRef.current?.focus();
+      addressInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
   }
 
-  const [address,  setAddress]  = useState(() => {
-    try { return typeof window !== 'undefined' ? (localStorage.getItem('sc_address') || '') : ''; } catch { return ''; }
-  });
-  const [addrSet,  setAddrSet]  = useState(() => {
-    try { return typeof window !== 'undefined' ? localStorage.getItem('sc_addrSet') === 'true' : false; } catch { return false; }
-  });
-  const [geoLabel, setGeoLabel] = useState(() => {
-    try { return typeof window !== 'undefined' ? (localStorage.getItem('sc_geoLabel') || '') : ''; } catch { return ''; }
-  });
+  const [address,  setAddress]  = useState('');
+  const [addrSet,  setAddrSet]  = useState(false);
+  const [geoLabel, setGeoLabel] = useState('');
+
+  // Hydrate address state from localStorage after mount
+  useEffect(() => {
+    try {
+      const a = localStorage.getItem('sc_address');
+      if (a) setAddress(a);
+      const s = localStorage.getItem('sc_addrSet');
+      if (s === 'true') setAddrSet(true);
+      const g = localStorage.getItem('sc_geoLabel');
+      if (g) setGeoLabel(g);
+      // Save origin address if not yet saved (first ever load)
+      if (!localStorage.getItem('sc_origin_address') && a) {
+        localStorage.setItem('sc_origin_address', a);
+      }
+    } catch {}
+  }, []);
 
   // Services
   const [services,   setServices]   = useState<EmergencyServices>({ police: null, fire: null, hospital: null });
@@ -1564,15 +1628,16 @@ export default function SafeCirclePage() {
     { id: 'dummy-4', name: 'Kevin Okafor',    phone: '901-555-0456', email: 'k.okafor@midsouthsocial.com' },
   ];
 
-  const [contacts, setContacts] = useState<Contact[]>(() => {
-    try {
-      const saved = typeof window !== 'undefined' ? localStorage.getItem('sc_contacts') : null;
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DUMMY_CONTACTS;
-  });
+  const [contacts, setContacts] = useState<Contact[]>(DUMMY_CONTACTS);
 
-  // Persist contacts to localStorage whenever they change
+  // Hydrate contacts from localStorage after mount, then persist on change
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('sc_contacts');
+      if (saved) setContacts(JSON.parse(saved));
+    } catch {}
+  }, []);
+
   useEffect(() => {
     try { localStorage.setItem('sc_contacts', JSON.stringify(contacts)); } catch {}
   }, [contacts]);
@@ -1597,7 +1662,7 @@ export default function SafeCirclePage() {
     lastGeoRef.current = raw;
     setSvcLoading(true); setSvcError('');
     setServices({ police: null, fire: null, hospital: null });
-    geocodeAddress(raw).then(geo => {
+    geocodeAddress(raw, selectedCity.geocodeSuffix).then(geo => {
       if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return; }
       setGeoLabel(geo.label);
       try { localStorage.setItem('sc_geoLabel', geo.label); } catch {}
@@ -1895,7 +1960,7 @@ export default function SafeCirclePage() {
             <p style={{ fontSize:10, fontWeight:700, letterSpacing:2, color:'#22d3ee', textTransform:'uppercase' }}>Address — {selectedCity.name}</p>
             <p style={{ fontSize:11, color:'#475569' }}>Street number and name only — no Rd, St, Ave, or suffix.</p>
             <div style={{ display:"flex", gap:8 }}>
-              <input type="text" placeholder={selectedCity.placeholderAddress} value={address}
+              <input ref={addressInputRef} type="text" placeholder={selectedCity.placeholderAddress} value={address}
                 onChange={e => { const v = e.target.value; setAddress(v); setAddrSet(false); setGeoLabel(''); try { localStorage.setItem('sc_address', v); localStorage.setItem('sc_addrSet','false'); localStorage.removeItem('sc_geoLabel'); } catch {} }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSetAddress(); }}
                 style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:14,
@@ -1909,12 +1974,47 @@ export default function SafeCirclePage() {
                 Set address
               </button>
             </div>
-            {addrSet && <p style={{ fontSize:11, color:'#10b981', fontWeight:600 }}>✓ {geoLabel || (address.trim() + ', Memphis TN')}</p>}
+            {addrSet && <p style={{ fontSize:11, color:'#10b981', fontWeight:600 }}>✓ {geoLabel || (address.trim() + ', ' + selectedCity.geocodeSuffix)}</p>}
+          </div>
+
+          {/* ── City quick-switcher bar ── */}
+          <div style={{
+            display:'flex', alignItems:'center', gap:8, flexWrap:'wrap',
+            padding:'10px 14px', borderRadius:14,
+            background:'linear-gradient(135deg,#0f1f3d,#0a1628)',
+            border:'1px solid rgba(34,211,238,0.18)',
+          }}>
+            <span style={{ fontSize:11, color:'#475569', fontWeight:700, flexShrink:0 }}>🌎 City:</span>
+            <span style={{
+              fontSize:12, fontWeight:700, color:'#22d3ee', flex:1,
+              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+            }}>
+              {selectedCity.name}{selectedCity.state ? `, ${selectedCity.state}` : ''} {selectedCity.apiStatus}
+            </span>
+            <button
+              onClick={() => {
+                // Scroll to WhereItWorks section
+                const el = document.getElementById('where-it-works');
+                if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+              }}
+              style={{
+                padding:'6px 14px', borderRadius:20, fontSize:11, fontWeight:700,
+                background:'rgba(168,85,247,0.15)', border:'1px solid rgba(168,85,247,0.4)',
+                color:'#c4b5fd', cursor:'pointer', whiteSpace:'nowrap',
+                touchAction:'manipulation', flexShrink:0,
+              }}>
+              ✏ Change city
+            </button>
           </div>
 
           {/* Crime map */}
           <Section title="🗺  Crime incidents — last 14 days, 0.5 mi radius" dark={true} defaultOpen>
-            <LeafletMapComponent lockedAddress={addrSet ? address : undefined} />
+            <LeafletMapComponent
+              lockedAddress={addrSet ? address : undefined}
+              citySuffix={selectedCity.geocodeSuffix}
+              esriLayer={selectedCity.esriLayer}
+              crimeField={selectedCity.crimeField}
+            />
           </Section>
 
           {/* Warrants */}
@@ -2088,7 +2188,9 @@ export default function SafeCirclePage() {
 
 
           {/* ── Where It Works — city selector ── */}
-          <WhereItWorks onCitySelect={handleCitySelect} selectedCity={selectedCity} />
+          <div id="where-it-works">
+            <WhereItWorks onCitySelect={handleCitySelect} selectedCity={selectedCity} originCity={originCity} />
+          </div>
 
           {/* Footer */}
           <div style={{ textAlign:'center', padding:'16px 0 8px' }}>
