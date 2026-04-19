@@ -1,6 +1,44 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
+
+// ── Local Section accordion (mirrors page.tsx Section) ───────────────────────
+function Section({ title, children, defaultOpen = false, dark = true }: {
+  title: string; children: React.ReactNode; defaultOpen?: boolean; dark?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{
+      borderRadius: 20,
+      border: open ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(168,85,247,0.3)',
+      background: dark ? 'linear-gradient(135deg,#0f1f3d,#0a1628)' : 'white',
+      overflow: 'visible',
+      boxShadow: open ? '0 4px 24px rgba(34,211,238,0.12)' : '0 4px 24px rgba(0,0,0,0.35)',
+    }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 16px', background: open ? 'rgba(34,211,238,0.06)' : 'transparent',
+          border: 'none', cursor: 'pointer', textAlign: 'left',
+          minHeight: 56, touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent',
+          borderRadius: open ? '20px 20px 0 0' : 20,
+        }}
+      >
+        <span style={{ fontSize: 14, fontWeight: 700, color: dark ? '#f1f5f9' : '#1e3a5f', flex: 1, paddingRight: 12 }}>{title}</span>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 40, height: 40, borderRadius: '50%',
+          background: open ? 'linear-gradient(135deg,#22d3ee,#3b82f6)' : 'linear-gradient(135deg,#a855f7,#7c3aed)',
+          color: 'white', fontSize: 24, fontWeight: 900, lineHeight: 1,
+          boxShadow: open ? '0 0 12px rgba(34,211,238,0.5)' : '0 0 12px rgba(168,85,247,0.5)',
+          flexShrink: 0, userSelect: 'none',
+        }}>{open ? '−' : '+'}</span>
+      </button>
+      {open && <div style={{ padding: '8px 16px 16px', borderTop: '1px solid rgba(34,211,238,0.15)' }}>{children}</div>}
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WHERE IT WORKS — Nested sub-accordion city selector
@@ -432,7 +470,7 @@ function WhereItWorks({
   const [openCountry, setOpenCountry] = useState('');
 
   return (
-    <section title={`🌎  Where It Works — ${selectedCity.flag || '📍'} ${selectedCity.name} active`} dark={true}>
+    <Section title={`🌎  Where It Works — ${COUNTRY_GROUPS.find(g => g.code === selectedCity.country)?.flag || '📍'} ${selectedCity.name} active`} dark={true}>
       <p style={{ fontSize: 11, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
         Select your city to set the crime map, geocoder, warrant links, and address bar.
         Your selection is saved for next time. ✅ = full API · ~ = web form link
@@ -489,10 +527,8 @@ function WhereItWorks({
         Modules 3–7 (sex offenders, nearest services, circle/SOS, GPS, panic) work in every city with no changes.
         Selecting a city clears your current address for a fresh start.
       </p>
-    </section>
+    </Section>
   );
 }
 
-
-
-
+export default WhereItWorks;

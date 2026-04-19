@@ -391,7 +391,7 @@ function TrackingTab({ contacts }: { contacts: Contact[] }) {
             </div>
             <div style={{ display:"flex", gap:8 }}>
               <button onClick={copyLink}
-                style={{ flex:1, padding:'9px', borderRadius:10, border:'none', fontWeight:700, fontSize:11, cursor:'pointer', background: copied ? 'linear-gradient(90deg,#10b981,#059669)' : 'rgba(255,255,255,0.05)', color: copied ? 'white' : '#94a3b8', border: copied ? 'none' : '1px solid rgba(34,211,238,0.2)' }}>
+                style={{ flex:1, padding:'9px', borderRadius:10, fontWeight:700, fontSize:11, cursor:'pointer', background: copied ? 'linear-gradient(90deg,#10b981,#059669)' : 'rgba(255,255,255,0.05)', color: copied ? 'white' : '#94a3b8', border: copied ? 'none' : '1px solid rgba(34,211,238,0.2)' }}>
                 {copied ? '✓ Copied!' : 'Copy Link'}
               </button>
               <button onClick={() => setShowSmsInput(s => !s)}
