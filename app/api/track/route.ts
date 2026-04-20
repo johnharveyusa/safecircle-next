@@ -1,54 +1,25 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-const sessions = new Map<string, {
-  lat: number; lng: number; name: string; updatedAt: number;
-}>();
+// In-memory store — sessions clear on server restart (intentional, privacy-first)
+const sessions: Map<string, { id: string; name: string; lat: number; lng: number; updatedAt: number }> = new Map();
 
-function cleanup() {
-  const cutoff = Date.now() - 2 * 60 * 60 * 1000;
-  for (const [id, s] of sessions) {
-    if (s.updatedAt < cutoff) sessions.delete(id);
-  }
+export async function GET(req: NextRequest) {
+ const all = req.nextUrl.searchParams.get('all');
+ if (all) {
+ return NextResponse.json(Array.from(sessions.values()));
+ }
+ const id = req.nextUrl.searchParams.get('id');
+ if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+ return NextResponse.json(sessions.get(id) ?? null);
 }
 
-// POST — tracked person posts location
-export async function POST(request: Request) {
-  try {
-    const { id, lat, lng, name } = await request.json();
-    if (!id || typeof lat !== 'number' || typeof lng !== 'number') {
-      return NextResponse.json({ error: 'id, lat, lng required' }, { status: 400 });
-    }
-    cleanup();
-    sessions.set(id, { lat, lng, name: name || 'Tracker', updatedAt: Date.now() });
-    return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: 'Bad request' }, { status: 400 });
-  }
-}
-
-// GET — watcher polls for tracked persons
-export async function GET(request: Request) {
-  cleanup();
-  const { searchParams } = new URL(request.url);
-  const id  = searchParams.get('id');
-  const all = searchParams.get('all');
-
-  if (all) {
-    const active = Array.from(sessions.entries()).map(([sid, s]) => ({ id: sid, ...s }));
-    return NextResponse.json(active);
-  }
-  if (id) {
-    const s = sessions.get(id);
-    if (!s) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json({ id, ...s });
-  }
-  return NextResponse.json({ error: 'id or all required' }, { status: 400 });
-}
-
-// DELETE — stop tracking session
-export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-  if (id) sessions.delete(id);
-  return NextResponse.json({ ok: true });
+export async function POST(req: NextRequest) {
+ try {
+ const { id, name, lat, lng } = await req.json();
+ if (!id || !lat || !lng) return NextResponse.json({ error: 'id, lat, lng required' }, { status: 400 });
+ sessions.set(id, { id, name: name || 'Field Worker', lat, lng, updatedAt: Date.now() });
+ return NextResponse.json({ ok: true });
+ } catch {
+ return NextResponse.json({ error: 'server error' }, { status: 500 });
+ }
 }
