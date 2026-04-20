@@ -67,3 +67,34 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #050d1f; }
 ::-webkit-scrollbar-thumb { background: linear-gradient(#22d3ee, #3b82f6); border-radius: 2px; }
+
+/* ── Mobile accordion fix ───────────────────────────────────────
+   Prevents horizontal overflow and ensures accordions are fully
+   visible on small screens (phones).
+───────────────────────────────────────────────────────────────── */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  /* Force accordion sections to fit within viewport */
+  div[style*="borderRadius:20"] {
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Ensure tab bar buttons don't overflow */
+  button[style*="flex:1"] {
+    min-width: 0 !important;
+    padding: 8px 4px !important;
+  }
+
+  /* Prevent any child from breaking layout */
+  main {
+    padding: 12px 10px !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
+  }
+}

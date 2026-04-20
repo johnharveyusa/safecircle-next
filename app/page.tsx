@@ -1026,7 +1026,7 @@ function HowToTab({ onShare, shareCopied }: { onShare: () => void; shareCopied: 
   );
 }
 
-type TabId = 'main' | 'tracking' | 'alerts' | 'panic' | 'howto';
+type TabId = 'main' | 'tracking' | 'alerts' | 'panic' | 'howto' | 'assessor';
 
 
 // ── City config type ──────────────────────────────────────────────────────────
@@ -1503,6 +1503,142 @@ function WhereItWorks({
   );
 }
 
+// ─── Tab 6: Assessor Lookup ───────────────────────────────────────────────────
+function AssessorTab({ address, selectedCity }: { address: string; selectedCity: CityConfig }) {
+  const isShelby = selectedCity.id === 'memphis';
+
+  // Build Shelby County Assessor search URL from address
+  function buildAssessorUrl() {
+    if (!address) return 'https://www.assessormelvinburgess.com/propertySearch';
+    const clean = address.trim();
+    return `https://www.assessormelvinburgess.com/propertySearch?searchText=${encodeURIComponent(clean)}`;
+  }
+
+  // Build Shelby County Trustee (tax) URL
+  function buildTrusteeUrl() {
+    if (!address) return 'https://www.shelbycountytrustee.com/103/Tax-Look-Up';
+    const clean = address.trim();
+    return `https://www.shelbycountytrustee.com/103/Tax-Look-Up?q=${encodeURIComponent(clean)}`;
+  }
+
+  // Build Register of Deeds GIS URL
+  function buildDeedsUrl() {
+    if (!address) return 'https://gis.register.shelby.tn.us/';
+    const clean = address.trim();
+    return `https://gis.register.shelby.tn.us/?search=${encodeURIComponent(clean)}`;
+  }
+
+  const cardStyle: React.CSSProperties = {
+    background: 'rgba(15,31,61,0.7)',
+    border: '1px solid rgba(34,211,238,0.2)',
+    borderRadius: 14,
+    padding: '18px 20px',
+    marginBottom: 14,
+  };
+
+  const btnStyle: React.CSSProperties = {
+    display: 'block',
+    width: '100%',
+    padding: '14px 16px',
+    borderRadius: 12,
+    border: 'none',
+    fontSize: 15,
+    fontWeight: 700,
+    cursor: 'pointer',
+    marginBottom: 10,
+    textAlign: 'left' as const,
+    letterSpacing: 0.2,
+  };
+
+  return (
+    <div style={{ padding: '16px 14px', maxWidth: 520, margin: '0 auto' }}>
+      <h2 style={{ fontSize: 22, fontWeight: 900, color: '#22d3ee', margin: '0 0 4px' }}>
+        🏠 Assessor Lookup
+      </h2>
+      <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 18px' }}>
+        Property ownership, assessed value &amp; tax records
+      </p>
+
+      {/* Address display */}
+      <div style={cardStyle}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 1 }}>
+          Current Address
+        </p>
+        <p style={{ fontSize: 15, fontWeight: 700, color: address ? '#f1f5f9' : '#475569', margin: 0 }}>
+          {address || '⚠ No address entered — go to Safe tab first'}
+        </p>
+      </div>
+
+      {isShelby ? (
+        <>
+          {/* Shelby County Assessor */}
+          <div style={cardStyle}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#22d3ee', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 1 }}>
+              🏛 Shelby County Assessor
+            </p>
+            <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 12px' }}>
+              Owner name · Appraised value · Assessed value · Parcel ID · Last sale date
+            </p>
+            <button
+              style={{ ...btnStyle, background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', color: 'white' }}
+              onClick={() => window.open(buildAssessorUrl(), '_blank')}
+            >
+              🔍 Search Assessor Records →
+            </button>
+          </div>
+
+          {/* Shelby County Trustee - Tax */}
+          <div style={cardStyle}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 1 }}>
+              💰 Shelby County Trustee — Tax Lookup
+            </p>
+            <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 12px' }}>
+              Property tax bills · Payment status · Tax history
+            </p>
+            <button
+              style={{ ...btnStyle, background: 'linear-gradient(135deg,#d97706,#b45309)', color: 'white' }}
+              onClick={() => window.open(buildTrusteeUrl(), '_blank')}
+            >
+              💵 Search Tax Records →
+            </button>
+          </div>
+
+          {/* Register of Deeds */}
+          <div style={cardStyle}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#a78bfa', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 1 }}>
+              📜 Register of Deeds — GIS Map
+            </p>
+            <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 12px' }}>
+              Deeds · Mortgages · Aerial view · Surrounding parcels · Sales data
+            </p>
+            <button
+              style={{ ...btnStyle, background: 'linear-gradient(135deg,#7c3aed,#5b21b6)', color: 'white' }}
+              onClick={() => window.open(buildDeedsUrl(), '_blank')}
+            >
+              🗺 View on GIS Map →
+            </button>
+          </div>
+
+          {/* Quick tip */}
+          <div style={{ ...cardStyle, borderColor: 'rgba(34,211,238,0.1)', background: 'rgba(34,211,238,0.04)' }}>
+            <p style={{ fontSize: 11, color: '#64748b', margin: 0, lineHeight: 1.6 }}>
+              💡 <strong style={{ color: '#94a3b8' }}>Pro tip:</strong> For warrants, use street name only (no number/direction). For Assessor, use the full address as entered above.
+            </p>
+          </div>
+        </>
+      ) : (
+        <div style={cardStyle}>
+          <p style={{ fontSize: 14, color: '#94a3b8', margin: 0, textAlign: 'center', padding: '20px 0' }}>
+            🌐 Assessor lookup for <strong style={{ color: '#f1f5f9' }}>{selectedCity.name}</strong> coming soon.
+            <br /><br />
+            <span style={{ fontSize: 12, color: '#64748b' }}>Currently available for Memphis / Shelby County only.</span>
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SafeCirclePage() {
   const [activeTab, setActiveTab] = useState<TabId>('main');
   const [showDisclaimer,   setShowDisclaimer]   = useState(true);
@@ -1772,11 +1908,12 @@ export default function SafeCirclePage() {
 
   // ── Tab bar ──────────────────────────────────────────────────────────────
   const tabs: Array<{ id: TabId; label: string; sub: string }> = [
-    { id: 'main',     label: '🛡',  sub: 'Safe'    },
-    { id: 'tracking', label: '📍',  sub: 'Track'   },
-    { id: 'alerts',   label: '🚨',  sub: 'Alerts'  },
-    { id: 'panic',    label: '📹',  sub: 'Panic'   },
-    { id: 'howto',    label: '❓',  sub: 'How To'  },
+    { id: 'main',     label: '🛡',  sub: 'Safe'     },
+    { id: 'tracking', label: '📍',  sub: 'Track'    },
+    { id: 'alerts',   label: '🚨',  sub: 'Alerts'   },
+    { id: 'panic',    label: '📹',  sub: 'Panic'    },
+    { id: 'assessor', label: '🏠',  sub: 'Assessor' },
+    { id: 'howto',    label: '❓',  sub: 'How To'   },
   ];
 
   return (
@@ -2244,6 +2381,11 @@ export default function SafeCirclePage() {
         {/* ═══════════════════════════ TAB 5 — HOW TO ══════════════════════════ */}
         {activeTab === 'howto' && (
           <HowToTab onShare={shareApp} shareCopied={shareCopied} />
+        )}
+
+        {/* ══════════════════════════ TAB 6 — ASSESSOR ══════════════════════════ */}
+        {activeTab === 'assessor' && (
+          <AssessorTab address={address} selectedCity={selectedCity} />
         )}
 
       </main>
