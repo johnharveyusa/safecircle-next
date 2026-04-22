@@ -1514,11 +1514,13 @@ function AssessorTab({ address, selectedCity }: { address: string; selectedCity:
     return `https://www.assessormelvinburgess.com/propertySearch?searchText=${encodeURIComponent(clean)}`;
   }
 
-  // Build Shelby County Trustee (tax) URL
+  // Parse address — street number + first word of street name only (same rule as warrants)
+  const addressParts = address.trim().split(/\s+/);
+  const streetNum = addressParts[0] || '';
+  const streetName = addressParts[1] || '';
+
   function buildTrusteeUrl() {
-    if (!address) return 'https://www.shelbycountytrustee.com/103/Tax-Look-Up';
-    const clean = address.trim();
-    return `https://www.shelbycountytrustee.com/103/Tax-Look-Up?q=${encodeURIComponent(clean)}`;
+    return 'https://www.shelbycountytrustee.com/103/Tax-Look-Up';
   }
 
   // Build Register of Deeds GIS URL
@@ -1592,14 +1594,21 @@ function AssessorTab({ address, selectedCity }: { address: string; selectedCity:
             <p style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 1 }}>
               💰 Shelby County Trustee — Tax Lookup
             </p>
-            <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 12px' }}>
+            <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 10px' }}>
               Property tax bills · Payment status · Tax history
             </p>
+            {address && (
+              <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+                <p style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700, margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: 1 }}>Enter these values on the Trustee site:</p>
+                <p style={{ fontSize: 13, color: '#f1f5f9', margin: '0 0 4px' }}>Street Number: <strong>{streetNum}</strong></p>
+                <p style={{ fontSize: 13, color: '#f1f5f9', margin: 0 }}>Street Name: <strong>{streetName}</strong></p>
+              </div>
+            )}
             <button
               style={{ ...btnStyle, background: 'linear-gradient(135deg,#d97706,#b45309)', color: 'white' }}
               onClick={() => window.open(buildTrusteeUrl(), '_blank')}
             >
-              💵 Search Tax Records →
+              💵 Open Tax Lookup →
             </button>
           </div>
 
