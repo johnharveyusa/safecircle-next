@@ -277,11 +277,11 @@ export default function LeafletMapComponent({
     setLoading(false);
   }
 
-  function buildMarkers(L: any, map: any, store: any[]) {
+  function buildMarkers(L: any, map: any, store: any[], incidentList: Incident[]) {
     if (!geoRef.current) return;
     const { lat, lon } = geoRef.current;
     const bounds = L.latLngBounds([[lat, lon]]);
-    for (const f of incidents) {
+    for (const f of incidentList) {
       const a = f.attributes;
       if (typeof a.Latitude !== 'number' || typeof a.Longitude !== 'number') continue;
       const cat = (a.UCR_Category || 'OTHER').trim();
@@ -345,7 +345,7 @@ export default function LeafletMapComponent({
         color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05,
         weight: 1.5, dashArray: '4 4',
       }).addTo(map);
-      buildMarkers(L, map, markersRef.current);
+      buildMarkers(L, map, markersRef.current, incidents);
       setMapStatus(`${incidents.length} incidents — tap a category to filter`);
     }
     init();
@@ -380,7 +380,7 @@ export default function LeafletMapComponent({
         color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05,
         weight: 1.5, dashArray: '4 4',
       }).addTo(map);
-      buildMarkers(L, map, bigMarkersRef.current);
+      buildMarkers(L, map, bigMarkersRef.current, incidents);
     }, 100);
     return () => { if (bigMapRef.current) { try { bigMapRef.current.remove(); } catch {} bigMapRef.current = null; } };
   }, [enlarged, incidents]);
