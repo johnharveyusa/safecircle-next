@@ -685,7 +685,7 @@ export default function LeafletMapComponent({
       {categoryCounts.length > 0 && <FilterBar />}
 
       {/* Map */}
-      <div ref={mapDivRef} id="ps-map" style={{ width:'100%', borderRadius:16, border:'2px solid rgba(34,211,238,0.3)', overflow:'hidden', height:400, minHeight:400 }} />
+      <div ref={mapDivRef} id="ps-map" style={{ width:"100%", height:"400px", minHeight:"400px", borderRadius:"16px", border:"2px solid rgba(34,211,238,0.3)", display:"block", position:"relative" }}}} />
 
       {/* Incident list */}
       {incidents.length > 0 && <IncidentAccordion />}
