@@ -332,7 +332,7 @@ export default function LeafletMapComponent({
       if (!container) return;
       const map = L.map(container).setView([lat, lon], 14);
       mapRef.current = map;
-      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR, subdomains: 'abc' }).addTo(map);
+      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
       setTimeout(() => { map.invalidateSize(); }, 150);
       const homeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
@@ -369,7 +369,7 @@ export default function LeafletMapComponent({
       if (!bigContainer) return;
       const map = L.map(bigContainer).setView([lat, lon], 14);
       bigMapRef.current = map;
-      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR, subdomains: 'abc' }).addTo(map);
+      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
       setTimeout(() => { map.invalidateSize(); }, 150);
       const homeSvg2 = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <filter id="ds2"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
