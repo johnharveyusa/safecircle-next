@@ -7,7 +7,7 @@ const RADIUS_MILES = 0.5;
 const WINDOW_DAYS  = 14;
 
 // CartoDB Positron — light, reliable, no popup warnings, global CDN
-const TILE_URL  = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const TILE_URL  = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
 // ─── UCR colors ───────────────────────────────────────────────────────────────
@@ -252,6 +252,8 @@ export default function LeafletMapComponent({
   const bigMarkersRef = useRef<any[]>([]);
   const geoRef        = useRef<GeoResult | null>(null);
   const LRef          = useRef<any>(null);
+  const mapDivRef     = useRef<HTMLDivElement | null>(null);
+  const bigMapDivRef  = useRef<HTMLDivElement | null>(null);
 
   // ── Hard reset whenever city changes ─────────────────────────────────────
   useEffect(() => {
@@ -318,16 +320,20 @@ export default function LeafletMapComponent({
   useEffect(() => {
     if (stage !== 'map') return;
     let cancelled = false;
-    async function init() {
+    // Small delay lets React flush the div into the DOM before Leaflet touches it
+    const t = setTimeout(async () => {
+      if (cancelled || !mapDivRef.current || !geoRef.current) return;
       const L = (await import('leaflet')).default;
       LRef.current = L;
-      if (cancelled || !geoRef.current) return;
       const { lat, lon } = geoRef.current;
       if (mapRef.current) { try { mapRef.current.remove(); } catch {} mapRef.current = null; }
       markersRef.current = [];
-      const map = L.map('ps-map').setView([lat, lon], 14);
+      const container = mapDivRef.current;
+      if (!container) return;
+      const map = L.map(container).setView([lat, lon], 14);
       mapRef.current = map;
-      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR, subdomains: 'abcd' }).addTo(map);
+      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR, subdomains: 'abc' }).addTo(map);
+      setTimeout(() => { map.invalidateSize(); }, 150);
       const homeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
         <path d="M19 2 C10.16 2 3 9.16 3 18 C3 30 19 46 19 46 C19 46 35 30 35 18 C35 9.16 27.84 2 19 2Z"
@@ -347,9 +353,8 @@ export default function LeafletMapComponent({
       }).addTo(map);
       buildMarkers(L, map, markersRef.current, incidents);
       setMapStatus(`${incidents.length} incidents — tap a category to filter`);
-    }
-    init();
-    return () => { cancelled = true; };
+    }, 50);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [stage, incidents]);
 
   // ── Init enlarged map ───────────────────────────────────────────────────
@@ -360,9 +365,12 @@ export default function LeafletMapComponent({
     setTimeout(() => {
       if (bigMapRef.current) { try { bigMapRef.current.remove(); } catch {} bigMapRef.current = null; }
       bigMarkersRef.current = [];
-      const map = L.map('ps-map-big').setView([lat, lon], 14);
+      const bigContainer = bigMapDivRef.current;
+      if (!bigContainer) return;
+      const map = L.map(bigContainer).setView([lat, lon], 14);
       bigMapRef.current = map;
-      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR, subdomains: 'abcd' }).addTo(map);
+      L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR, subdomains: 'abc' }).addTo(map);
+      setTimeout(() => { map.invalidateSize(); }, 150);
       const homeSvg2 = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <filter id="ds2"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
         <path d="M19 2 C10.16 2 3 9.16 3 18 C3 30 19 46 19 46 C19 46 35 30 35 18 C35 9.16 27.84 2 19 2Z"
@@ -677,7 +685,7 @@ export default function LeafletMapComponent({
       {categoryCounts.length > 0 && <FilterBar />}
 
       {/* Map */}
-      <div id="ps-map" style={{ width:'100%', borderRadius:16, border:'2px solid rgba(34,211,238,0.3)', overflow:'hidden', height:400, minHeight:400 }} />
+      <div ref={mapDivRef} id="ps-map" style={{ width:'100%', borderRadius:16, border:'2px solid rgba(34,211,238,0.3)', overflow:'hidden', height:400, minHeight:400 }} />
 
       {/* Incident list */}
       {incidents.length > 0 && <IncidentAccordion />}
@@ -692,7 +700,7 @@ export default function LeafletMapComponent({
           <div style={{ padding:'10px 12px', background:'linear-gradient(135deg,#0f1f3d,#0a1628)', borderBottom:'1px solid rgba(34,211,238,0.10)', flexShrink:0, overflowX:'auto' }}>
             <FilterBar />
           </div>
-          <div id="ps-map-big" style={{ flex:1, width:'100%' }} />
+          <div ref={bigMapDivRef} id="ps-map-big" style={{ flex:1, width:'100%' }} />
         </div>
       )}
     </div>
