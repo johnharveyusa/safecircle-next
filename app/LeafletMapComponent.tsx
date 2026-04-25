@@ -7,8 +7,8 @@ const RADIUS_MILES = 0.5;
 const WINDOW_DAYS  = 14;
 
 // CartoDB Positron — light, reliable, no popup warnings, global CDN
-const TILE_URL  = 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png';
-const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const TILE_URL  = '/api/tiles/{z}/{x}/{y}.png';
+const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 // ─── UCR colors ───────────────────────────────────────────────────────────────
 
@@ -541,16 +541,26 @@ export default function LeafletMapComponent({
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
         <p style={{ fontSize:11, color:'#64748b' }}>Street number and name — no Rd, St, Ave, or Cove. Type <span style={{color:'#e2e8f0'}}>Macon</span>, not Macon Road.</p>
         <div style={{ display:'flex', gap:8 }}>
-          <input
-            type="text"
-            placeholder="Enter address"
-            value={address}
-            onChange={e => setAddress(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
-            style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:13,
-              background:'rgba(255,255,255,0.06)', border:'1px solid rgba(34,211,238,0.3)',
-              color:'white', outline:'none' }}
-          />
+          <div style={{ flex:1, position:'relative' }}>
+            {!address && (
+              <span style={{
+                position:'absolute', left:14, top:'50%', transform:'translateY(-50%)',
+                fontSize:13, color:'rgba(148,163,184,0.5)', pointerEvents:'none',
+                whiteSpace:'nowrap', overflow:'hidden', width:'calc(100% - 28px)',
+              }}>
+                Enter address — e.g. <span style={{ color:'rgba(226,232,240,0.4)' }}>4128 Weymouth</span>
+              </span>
+            )}
+            <input
+              type="text"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
+              style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13,
+                background:'rgba(255,255,255,0.06)', border:'1px solid rgba(34,211,238,0.3)',
+                color:'white', outline:'none' }}
+            />
+          </div>
           <button onClick={handleSearch} disabled={loading} style={{
             padding:'10px 16px', borderRadius:12, fontSize:13, fontWeight:700,
             color:'white', border:'none', cursor: loading ? 'not-allowed' : 'pointer',
@@ -685,7 +695,7 @@ export default function LeafletMapComponent({
       {categoryCounts.length > 0 && <FilterBar />}
 
       {/* Map */}
-      <div ref={mapDivRef} id="ps-map" style={{ width:"100%", height:"400px", minHeight:"400px", borderRadius:"16px", border:"2px solid rgba(34,211,238,0.3)", display:"block", position:"relative" }}}} />
+      <div ref={mapDivRef} id="ps-map" style={{ width:"100%", height:"400px", minHeight:"400px", borderRadius:"16px", border:"2px solid rgba(34,211,238,0.3)", display:"block", position:"relative" }} />
 
       {/* Incident list */}
       {incidents.length > 0 && <IncidentAccordion />}
