@@ -1798,6 +1798,16 @@ export default function SafeCirclePage() {
   const [feedbackEmail, setFeedbackEmail] = useState('');
   const [feedbackSent,  setFeedbackSent]  = useState(false);
   const [feedbackSending, setFeedbackSending] = useState(false);
+  const [showAddComment,  setShowAddComment]  = useState(false);
+  const [addComment,      setAddComment]      = useState('');
+  const [commentSent,     setCommentSent]     = useState(false);
+  const [showDevResponse, setShowDevResponse] = useState(false);
+  const [devResponse,     setDevResponse]     = useState('');
+  const [devVideoUrl,     setDevVideoUrl]     = useState('');
+  const [devResponseSent, setDevResponseSent] = useState(false);
+  const [devUnlocked,     setDevUnlocked]     = useState(false);
+  const [devPassword,     setDevPassword]     = useState('');
+  const [devAuthError,    setDevAuthError]    = useState('');
 
   // ── Services fetch ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -1927,6 +1937,19 @@ export default function SafeCirclePage() {
 
   return (
     <>
+      {/* ── Tab hover glow styles ── */}
+      <style>{`
+        .sc-tab-btn { transition: color 0.18s, background 0.18s, text-shadow 0.18s; }
+        .sc-tab-btn:hover .sc-tab-icon {
+          text-shadow: 0 0 10px rgba(34,211,238,0.9), 0 0 20px rgba(34,211,238,0.5);
+          filter: brightness(1.3);
+        }
+        .sc-tab-btn:hover {
+          color: #67e8f9 !important;
+          background: rgba(34,211,238,0.08) !important;
+        }
+      `}</style>
+
       {/* ── Disclaimer Modal ── */}
       {showDisclaimer && (
         <div style={{
@@ -2017,6 +2040,7 @@ export default function SafeCirclePage() {
           </button>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className="sc-tab-btn"
               style={{
                 flex:1, padding:'10px 8px', borderRadius:'12px 12px 0 0',
                 fontSize:12, fontWeight:700, cursor:'pointer', border:'none',
@@ -2024,7 +2048,7 @@ export default function SafeCirclePage() {
                 background: activeTab === t.id ? 'rgba(34,211,238,0.1)' : 'transparent',
                 color: activeTab === t.id ? '#22d3ee' : '#475569',
               }}>
-              <span style={{fontSize:16}}>{t.label}</span>
+              <span className="sc-tab-icon" style={{fontSize:16,display:'block'}}>{t.label}</span>
               <span style={{fontSize:9,marginTop:2,display:'block'}}>{t.sub}</span>
             </button>
           ))}
@@ -2327,6 +2351,78 @@ export default function SafeCirclePage() {
                   className="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-sm font-medium text-white transition-colors">
                   {feedbackSending ? 'Sending…' : 'Send Feedback'}
                 </button>
+
+                {/* ── Add Comment button ── */}
+                <div style={{ borderTop:'1px solid rgba(34,211,238,0.12)', paddingTop:10 }}>
+                  <button onClick={() => setShowAddComment(v => !v)}
+                    style={{ padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, color:'#22d3ee', border:'1px solid rgba(34,211,238,0.3)', background:'rgba(34,211,238,0.06)', cursor:'pointer', touchAction:'manipulation' }}>
+                    💬 Add Comment
+                  </button>
+                  {showAddComment && (
+                    <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:8 }}>
+                      <p style={{ fontSize:11, color:'#64748b' }}>Add a follow-up to your original suggestion.</p>
+                      <textarea rows={3} placeholder="Your follow-up comment..."
+                        value={addComment} onChange={e => setAddComment(e.target.value)}
+                        style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(34,211,238,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
+                      {commentSent ? (
+                        <p style={{ fontSize:12, color:'#10b981' }}>✅ Comment sent!</p>
+                      ) : (
+                        <button disabled={!addComment.trim()}
+                          onClick={() => { setCommentSent(true); setAddComment(''); setTimeout(() => { setCommentSent(false); setShowAddComment(false); }, 2500); }}
+                          style={{ padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, color:'white', border:'none', background:'linear-gradient(90deg,#22d3ee,#3b82f6)', cursor:'pointer', opacity: addComment.trim() ? 1 : 0.4, touchAction:'manipulation' }}>
+                          Send Comment
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Developer Response button (password protected) ── */}
+                <div style={{ borderTop:'1px solid rgba(168,85,247,0.12)', paddingTop:10 }}>
+                  <button onClick={() => setShowDevResponse(v => !v)}
+                    style={{ padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, color:'#a855f7', border:'1px solid rgba(168,85,247,0.3)', background:'rgba(168,85,247,0.06)', cursor:'pointer', touchAction:'manipulation' }}>
+                    🛠 Developer Response
+                  </button>
+                  {showDevResponse && !devUnlocked && (
+                    <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:8 }}>
+                      <p style={{ fontSize:11, color:'#64748b' }}>Developer access required.</p>
+                      <input type="password" placeholder="Enter developer password"
+                        value={devPassword} onChange={e => { setDevPassword(e.target.value); setDevAuthError(''); }}
+                        style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(168,85,247,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
+                      {devAuthError && <p style={{ fontSize:11, color:'#ef4444' }}>❌ {devAuthError}</p>}
+                      <button disabled={!devPassword.trim()}
+                        onClick={async () => {
+                          const res = await fetch('/api/devauth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: devPassword }) });
+                          if (res.ok) { setDevUnlocked(true); setDevPassword(''); setDevAuthError(''); }
+                          else { setDevAuthError('Incorrect password.'); setDevPassword(''); }
+                        }}
+                        style={{ padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, color:'white', border:'none', background:'linear-gradient(90deg,#a855f7,#7c3aed)', cursor:'pointer', opacity: devPassword.trim() ? 1 : 0.4, touchAction:'manipulation' }}>
+                        Unlock
+                      </button>
+                    </div>
+                  )}
+                  {showDevResponse && devUnlocked && (
+                    <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:8 }}>
+                      <p style={{ fontSize:11, color:'#64748b' }}>Reply to user feedback — text, video URL, or any update.</p>
+                      <textarea rows={3} placeholder="Developer response text..."
+                        value={devResponse} onChange={e => setDevResponse(e.target.value)}
+                        style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(168,85,247,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
+                      <input type="url" placeholder="Video URL (optional — YouTube, Loom, etc.)"
+                        value={devVideoUrl} onChange={e => setDevVideoUrl(e.target.value)}
+                        style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(168,85,247,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
+                      {devResponseSent ? (
+                        <p style={{ fontSize:12, color:'#10b981' }}>✅ Response posted!</p>
+                      ) : (
+                        <button disabled={!devResponse.trim()}
+                          onClick={() => { setDevResponseSent(true); setDevResponse(''); setDevVideoUrl(''); setTimeout(() => { setDevResponseSent(false); setShowDevResponse(false); setDevUnlocked(false); }, 2500); }}
+                          style={{ padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, color:'white', border:'none', background:'linear-gradient(90deg,#a855f7,#7c3aed)', cursor:'pointer', opacity: devResponse.trim() ? 1 : 0.4, touchAction:'manipulation' }}>
+                          Post Response
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
           </Section>
