@@ -7,7 +7,7 @@ const RADIUS_MILES = 0.5;
 const WINDOW_DAYS  = 14;
 
 // CartoDB Positron — light, reliable, no popup warnings, global CDN
-const TILE_URL  = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const TILE_URL  = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 // ─── UCR colors ───────────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ async function fetchCrimes(
         units: 'esriSRUnit_Meter',
         outFields: '*',
         orderByFields: 'OBJECTID DESC',
-        resultRecordCount: '200',
+        resultRecordCount: '500',
         returnGeometry: 'true',
         time: `${start},${end}`,
         f: 'json',
@@ -333,7 +333,6 @@ export default function LeafletMapComponent({
       const map = L.map(container).setView([lat, lon], 14);
       mapRef.current = map;
       L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
-      setTimeout(() => { map.invalidateSize(); }, 150);
       const homeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
         <path d="M19 2 C10.16 2 3 9.16 3 18 C3 30 19 46 19 46 C19 46 35 30 35 18 C35 9.16 27.84 2 19 2Z"
@@ -351,8 +350,12 @@ export default function LeafletMapComponent({
         color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05,
         weight: 1.5, dashArray: '4 4',
       }).addTo(map);
-      buildMarkers(L, map, markersRef.current, incidents);
-      setMapStatus(`${incidents.length} incidents — tap a category to filter`);
+      setTimeout(() => {
+        map.invalidateSize();
+        map.setView([lat, lon], 14);
+        buildMarkers(L, map, markersRef.current, incidents);
+        setMapStatus(`${incidents.length} incidents — tap a category to filter`);
+      }, 600);
     }, 50);
     return () => { cancelled = true; clearTimeout(t); };
   }, [stage, incidents]);
@@ -370,7 +373,7 @@ export default function LeafletMapComponent({
       const map = L.map(bigContainer).setView([lat, lon], 14);
       bigMapRef.current = map;
       L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
-      setTimeout(() => { map.invalidateSize(); }, 150);
+      setTimeout(() => { map.invalidateSize(); map.setView([lat, lon], 14); }, 500);
       const homeSvg2 = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
         <filter id="ds2"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.45"/></filter>
         <path d="M19 2 C10.16 2 3 9.16 3 18 C3 30 19 46 19 46 C19 46 35 30 35 18 C35 9.16 27.84 2 19 2Z"
