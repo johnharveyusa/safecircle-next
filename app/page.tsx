@@ -1804,10 +1804,11 @@ export default function SafeCirclePage() {
   const [showDevResponse, setShowDevResponse] = useState(false);
   const [devResponse,     setDevResponse]     = useState('');
   const [devVideoUrl,     setDevVideoUrl]     = useState('');
+  const [devVideoFile,    setDevVideoFile]    = useState<File | null>(null);
   const [devResponseSent, setDevResponseSent] = useState(false);
   const [devUnlocked,     setDevUnlocked]     = useState(false);
-  const [devPassword,     setDevPassword]     = useState('');
-  const [devAuthError,    setDevAuthError]    = useState('');
+  const [devTapCount,     setDevTapCount]     = useState(0);
+  const devTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Services fetch ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -2377,44 +2378,96 @@ export default function SafeCirclePage() {
                   )}
                 </div>
 
-                {/* ── Developer Response button (password protected) ── */}
+                {/* ── Developer Response — hidden tap trigger (3 taps unlocks) ── */}
                 <div style={{ borderTop:'1px solid rgba(168,85,247,0.12)', paddingTop:10 }}>
-                  <button onClick={() => setShowDevResponse(v => !v)}
-                    style={{ padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, color:'#a855f7', border:'1px solid rgba(168,85,247,0.3)', background:'rgba(168,85,247,0.06)', cursor:'pointer', touchAction:'manipulation' }}>
-                    🛠 Developer Response
-                  </button>
-                  {showDevResponse && !devUnlocked && (
-                    <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:8 }}>
-                      <p style={{ fontSize:11, color:'#64748b' }}>Developer access required.</p>
-                      <input type="password" placeholder="Enter developer password"
-                        value={devPassword} onChange={e => { setDevPassword(e.target.value); setDevAuthError(''); }}
-                        style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(168,85,247,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
-                      {devAuthError && <p style={{ fontSize:11, color:'#ef4444' }}>❌ {devAuthError}</p>}
-                      <button disabled={!devPassword.trim()}
-                        onClick={async () => {
-                          const res = await fetch('/api/devauth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: devPassword }) });
-                          if (res.ok) { setDevUnlocked(true); setDevPassword(''); setDevAuthError(''); }
-                          else { setDevAuthError('Incorrect password.'); setDevPassword(''); }
-                        }}
-                        style={{ padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, color:'white', border:'none', background:'linear-gradient(90deg,#a855f7,#7c3aed)', cursor:'pointer', opacity: devPassword.trim() ? 1 : 0.4, touchAction:'manipulation' }}>
-                        Unlock
-                      </button>
+                  {/* Hidden tap zone — tiny, invisible, top-right corner feel */}
+                  {!devUnlocked && (
+                    <div
+                      onClick={() => {
+                        const next = devTapCount + 1;
+                        if (devTapTimer.current) clearTimeout(devTapTimer.current);
+                        if (next >= 3) {
+                          setDevUnlocked(true);
+                          setDevTapCount(0);
+                          setShowDevResponse(true);
+                        } else {
+                          setDevTapCount(next);
+                          devTapTimer.current = setTimeout(() => setDevTapCount(0), 2000);
+                        }
+                      }}
+                      style={{
+                        width:28, height:28, borderRadius:'50%',
+                        background:'rgba(168,85,247,0.06)',
+                        border:'1px solid rgba(168,85,247,0.12)',
+                        cursor:'default', userSelect:'none',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        touchAction:'manipulation',
+                      }}
+                      title=""
+                    >
+                      <span style={{ fontSize:9, color:'rgba(168,85,247,0.3)' }}>
+                        {devTapCount > 0 ? '·'.repeat(devTapCount) : '·'}
+                      </span>
                     </div>
                   )}
-                  {showDevResponse && devUnlocked && (
-                    <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:8 }}>
-                      <p style={{ fontSize:11, color:'#64748b' }}>Reply to user feedback — text, video URL, or any update.</p>
+
+                  {/* Once unlocked — show the full developer panel */}
+                  {devUnlocked && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                        <p style={{ fontSize:11, color:'#a855f7', fontWeight:600 }}>🛠 Developer Response</p>
+                        <button onClick={() => { setDevUnlocked(false); setShowDevResponse(false); setDevTapCount(0); }}
+                          style={{ fontSize:10, color:'#64748b', background:'none', border:'none', cursor:'pointer' }}>
+                          ✕ close
+                        </button>
+                      </div>
                       <textarea rows={3} placeholder="Developer response text..."
                         value={devResponse} onChange={e => setDevResponse(e.target.value)}
                         style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(168,85,247,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
-                      <input type="url" placeholder="Video URL (optional — YouTube, Loom, etc.)"
-                        value={devVideoUrl} onChange={e => setDevVideoUrl(e.target.value)}
+
+                      {/* Video — paste URL or browse for file */}
+                      <p style={{ fontSize:11, color:'#64748b', marginBottom:2 }}>Video (optional)</p>
+                      <input type="url" placeholder="Paste URL — YouTube, Loom, etc."
+                        value={devVideoUrl} onChange={e => { setDevVideoUrl(e.target.value); setDevVideoFile(null); }}
                         style={{ width:'100%', padding:'10px 14px', borderRadius:12, fontSize:13, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(168,85,247,0.2)', color:'white', outline:'none', boxSizing:'border-box' }} />
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:11, color:'#475569' }}>— or —</span>
+                        <label style={{
+                          padding:'7px 14px', borderRadius:10, fontSize:12, fontWeight:600,
+                          color:'#a855f7', border:'1px solid rgba(168,85,247,0.35)',
+                          background:'rgba(168,85,247,0.08)', cursor:'pointer', whiteSpace:'nowrap',
+                        }}>
+                          📁 Browse file
+                          <input type="file" accept="video/*"
+                            style={{ display:'none' }}
+                            onChange={e => {
+                              const f = e.target.files?.[0] ?? null;
+                              setDevVideoFile(f);
+                              if (f) setDevVideoUrl('');
+                            }} />
+                        </label>
+                        {devVideoFile && (
+                          <span style={{ fontSize:11, color:'#10b981', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160 }}>
+                            ✅ {devVideoFile.name}
+                          </span>
+                        )}
+                      </div>
+
                       {devResponseSent ? (
                         <p style={{ fontSize:12, color:'#10b981' }}>✅ Response posted!</p>
                       ) : (
                         <button disabled={!devResponse.trim()}
-                          onClick={() => { setDevResponseSent(true); setDevResponse(''); setDevVideoUrl(''); setTimeout(() => { setDevResponseSent(false); setShowDevResponse(false); setDevUnlocked(false); }, 2500); }}
+                          onClick={() => {
+                            setDevResponseSent(true);
+                            setDevResponse('');
+                            setDevVideoUrl('');
+                            setDevVideoFile(null);
+                            setTimeout(() => {
+                              setDevResponseSent(false);
+                              setShowDevResponse(false);
+                              setDevUnlocked(false);
+                            }, 2500);
+                          }}
                           style={{ padding:'8px 16px', borderRadius:10, fontSize:12, fontWeight:600, color:'white', border:'none', background:'linear-gradient(90deg,#a855f7,#7c3aed)', cursor:'pointer', opacity: devResponse.trim() ? 1 : 0.4, touchAction:'manipulation' }}>
                           Post Response
                         </button>
