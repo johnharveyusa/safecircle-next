@@ -7,7 +7,7 @@ const RADIUS_MILES = 0.5;
 const WINDOW_DAYS  = 14;
 
 // CartoDB Positron — light, reliable, no popup warnings, global CDN
-const TILE_URL  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_URL  = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 // ─── UCR colors ───────────────────────────────────────────────────────────────
