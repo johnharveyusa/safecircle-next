@@ -226,13 +226,15 @@ async function fetchCrimes(
 export default function LeafletMapComponent({
   lockedAddress,
   citySuffix = ', Memphis, TN',
-  esriLayer  = 'https://services2.arcgis.com/saWmpKJIUAjyyNVc/arcgis/rest/services/MPD_Public_Safety_Incidents/FeatureServer/0',
+  esriLayer  = '',
   crimeField = 'UCR_Category',
+  spotCrimeFirst = true,
 }: {
   lockedAddress?: string;
   citySuffix?:    string;
   esriLayer?:     string;
   crimeField?:    string;
+  spotCrimeFirst?: boolean;
 }) {
   const [address,        setAddress]        = useState('');
   const [inputStatus,    setInputStatus]    = useState('');
@@ -245,6 +247,7 @@ export default function LeafletMapComponent({
   const [mapStatus,      setMapStatus]      = useState('');
   const [enlarged,       setEnlarged]       = useState(false);
   const [noApiNote,      setNoApiNote]      = useState('');
+  const [spotCrimeIframe, setSpotCrimeIframe] = useState('');
 
   const mapRef        = useRef<any>(null);
   const bigMapRef     = useRef<any>(null);
@@ -276,6 +279,7 @@ export default function LeafletMapComponent({
     setMapStatus('');
     setEnlarged(false);
     setNoApiNote('');
+    setSpotCrimeIframe('');
     setLoading(false);
   }
 
@@ -285,7 +289,12 @@ export default function LeafletMapComponent({
     const bounds = L.latLngBounds([[lat, lon]]);
     for (const f of incidentList) {
       const a = f.attributes;
-      if (typeof a.Latitude !== 'number' || typeof a.Longitude !== 'number') continue;
+      // Ensure lat/lon are numbers (SpotCrime returns strings)
+      const lat2 = typeof a.Latitude  === 'number' ? a.Latitude  : parseFloat(a.Latitude);
+      const lon2 = typeof a.Longitude === 'number' ? a.Longitude : parseFloat(a.Longitude);
+      if (isNaN(lat2) || isNaN(lon2)) continue;
+      a.Latitude  = lat2;
+      a.Longitude = lon2;
       const cat = (a.UCR_Category || 'OTHER').trim();
       const marker = L.marker([a.Latitude, a.Longitude], {
         icon: L.divIcon({
@@ -310,9 +319,9 @@ export default function LeafletMapComponent({
       bounds.extend([a.Latitude, a.Longitude]);
       store.push(marker);
     }
-    if (store.length > 0) {
-      map.fitBounds(bounds.pad(0.15), { maxZoom: 16 });
-      if (map.getZoom() < 13) map.setZoom(13);
+    if (store.length > 0 && geoRef.current) {
+      // Always center on the searched address at a readable zoom
+      map.setView([geoRef.current.lat, geoRef.current.lon], 13);
     }
   }
 
@@ -330,7 +339,7 @@ export default function LeafletMapComponent({
       markersRef.current = [];
       const container = mapDivRef.current;
       if (!container) return;
-      const map = L.map(container).setView([lat, lon], 14);
+      const map = L.map(container).setView([lat, lon], 13);
       mapRef.current = map;
       L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
       const homeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
@@ -352,7 +361,7 @@ export default function LeafletMapComponent({
       }).addTo(map);
       setTimeout(() => {
         map.invalidateSize();
-        map.setView([lat, lon], 14);
+        map.setView([lat, lon], 13);
         buildMarkers(L, map, markersRef.current, incidents);
         setMapStatus(`${incidents.length} incidents — tap a category to filter`);
       }, 600);
@@ -370,7 +379,7 @@ export default function LeafletMapComponent({
       bigMarkersRef.current = [];
       const bigContainer = bigMapDivRef.current;
       if (!bigContainer) return;
-      const map = L.map(bigContainer).setView([lat, lon], 14);
+      const map = L.map(bigContainer).setView([lat, lon], 13);
       bigMapRef.current = map;
       L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
       setTimeout(() => { map.invalidateSize(); map.setView([lat, lon], 14); }, 500);
@@ -450,14 +459,22 @@ export default function LeafletMapComponent({
     setInputStatus('Fetching crime data…');
     let rawIncidents: Incident[] = [];
 
-    // Check if this city has no direct API support
-    const noApi = esriLayer.startsWith('socrata:') || esriLayer.startsWith('bocsar:') ||
-                  esriLayer.startsWith('csa:')     || esriLayer.startsWith('nz-police:');
+    // SpotCrime first — works everywhere in the US
+    try {
+      const scRes = await fetch(`/api/spotcrime?lat=${geo.lat}&lon=${geo.lon}&radius=0.5&address=${encodeURIComponent(geo.label)}`);
+      const scData = await scRes.json();
+      if (Array.isArray(scData.crimes) && scData.crimes.length > 0) {
+        rawIncidents = scData.crimes;
+      }
+    } catch { /* SpotCrime unavailable — fall through to ESRI */ }
 
-    if (noApi) {
-      setNoApiNote(`⚠ Crime data for this city uses a web portal that requires server-side access. The map will show your address but no crime markers. Warrant and jail links still work.`);
-    } else {
-      rawIncidents = await fetchCrimes(esriLayer, crimeField, geo.lat, geo.lon);
+    // Also try ESRI if we have a layer and SpotCrime returned nothing
+    if (rawIncidents.length === 0) {
+      const noApi = !esriLayer || esriLayer.startsWith('socrata:') || esriLayer.startsWith('bocsar:') ||
+                    esriLayer.startsWith('csa:')     || esriLayer.startsWith('nz-police:');
+      if (!noApi) {
+        rawIncidents = await fetchCrimes(esriLayer, crimeField, geo.lat, geo.lon);
+      }
     }
 
     const counts: Record<string, number> = {};
@@ -699,6 +716,22 @@ export default function LeafletMapComponent({
 
       {/* Map */}
       <div ref={mapDivRef} id="ps-map" style={{ width:"100%", height:"400px", minHeight:"400px", borderRadius:"16px", border:"2px solid rgba(34,211,238,0.3)", display:"block", position:"relative" }} />
+
+      {/* SpotCrime iframe — always shown */}
+      {spotCrimeIframe && (
+        <div style={{ borderRadius: 16, overflow: 'hidden', border: '2px solid rgba(34,211,238,0.3)', marginTop: 8 }}>
+          <p style={{ fontSize: 11, color: '#94a3b8', padding: '6px 12px', margin: 0, background: 'rgba(34,211,238,0.06)' }}>
+            🔍 SpotCrime — crime activity near this address
+          </p>
+          <iframe
+            src={spotCrimeIframe}
+            width="100%"
+            height="400"
+            style={{ display: 'block', border: 'none' }}
+            title="SpotCrime crime map"
+          />
+        </div>
+      )}
 
       {/* Incident list */}
       {incidents.length > 0 && <IncidentAccordion />}

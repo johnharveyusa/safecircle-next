@@ -1,12 +1,8 @@
 'use client';
+import WhereItWorksComponent, { UniversalLocation } from './WhereItWorks-component';
 
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useRef, useCallback } from 'react';
-
-const LeafletMapComponent = dynamic(() => import('./LeafletMapComponent'), {
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center h-40 text-sm text-slate-400">Loading map…</div>,
-});
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1429,81 +1425,11 @@ function CountryGroup({
   );
 }
 
-// ── Main WhereItWorks component ───────────────────────────────────────────────
-
-function WhereItWorks({
-  onCitySelect, selectedCity, originCity
-}: {
-  onCitySelect: (city: CityConfig) => void;
-  selectedCity: CityConfig;
-  originCity: CityConfig;
-}) {
-  const [openCountry, setOpenCountry] = useState('');
-
-  return (
-    <Section title={`🌎  Where It Works — ${selectedCity.name} active`} dark={true}>
-      <p style={{ fontSize: 11, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
-        Select your city to set the crime map, geocoder, warrant links, and address bar.
-        Your selection is saved for next time. ✅ = full API · ~ = web form link
-      </p>
-
-      {/* Currently active city pill */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-        borderRadius: 12, background: 'rgba(16,185,129,0.08)',
-        border: '1px solid rgba(16,185,129,0.3)', marginBottom: 14,
-      }}>
-        <span style={{ fontSize: 14 }}>📍</span>
-        <div style={{ flex: 1 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#10b981' }}>
-            Active city: {selectedCity.name}{selectedCity.state ? `, ${selectedCity.state}` : ''}
-          </span>
-          <span style={{ fontSize: 10, color: '#475569', marginLeft: 8 }}>
-            {selectedCity.geocodeSuffix} · {selectedCity.updateFreq} updates
-          </span>
-        </div>
-        <span style={{ fontSize: 12, color: selectedCity.apiStatus === '✅' ? '#10b981' : '#f59e0b' }}>
-          {selectedCity.apiStatus}
-        </span>
-      </div>
-
-      {/* Country sub-accordions */}
-      {COUNTRY_GROUPS.map(group => (
-        <CountryGroup
-          key={group.code}
-          flag={group.flag}
-          label={group.label}
-          cities={group.cities}
-          selectedCity={selectedCity}
-          originCity={originCity}
-          onSelect={city => {
-            onCitySelect(city);
-            setOpenCountry('');
-          }}
-          openKey={openCountry}
-          setOpenKey={setOpenCountry}
-        />
-      ))}
-
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' as const, marginTop: 12 }}>
-        {[['✅', 'Full ESRI/REST API', '#10b981'], ['~', 'Web form / partial', '#f59e0b']].map(([icon, label, color]) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ fontSize: 13, color: color as string }}>{icon}</span>
-            <span style={{ fontSize: 10, color: '#64748b' }}>{label}</span>
-          </div>
-        ))}
-      </div>
-
-      <p style={{ fontSize: 10, color: '#475569', lineHeight: 1.6, margin: '10px 0 0' }}>
-        Modules 3–7 (sex offenders, nearest services, circle/SOS, GPS, panic) work in every city with no changes.
-        Selecting a city clears your current address for a fresh start.
-      </p>
-    </Section>
-  );
+// ── WhereItWorks — wrapper around new universal component ──────────────────────
+function WhereItWorks({ onLocationSet, currentLocation }: { onLocationSet: (loc: UniversalLocation) => void; currentLocation: UniversalLocation | null }) {
+  return <WhereItWorksComponent onLocationSet={onLocationSet} currentLocation={currentLocation} />;
 }
 
-// ─── Tab 6: Assessor Lookup ───────────────────────────────────────────────────
 function AssessorTab({ address, selectedCity }: { address: string; selectedCity: CityConfig }) {
   const isShelby = selectedCity.id === 'memphis';
 
@@ -1734,6 +1660,8 @@ export default function SafeCirclePage() {
   const [address,  setAddress]  = useState('');
   const [addrSet,  setAddrSet]  = useState(false);
   const [geoLabel, setGeoLabel] = useState('');
+  const [geoLat,   setGeoLat]   = useState<number | null>(null);
+  const [geoLon,   setGeoLon]   = useState<number | null>(null);
 
   // Hydrate address state from localStorage after mount
   useEffect(() => {
@@ -1821,6 +1749,8 @@ export default function SafeCirclePage() {
     geocodeAddress(raw, selectedCity.geocodeSuffix).then(geo => {
       if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return; }
       setGeoLabel(geo.label);
+      setGeoLat(geo.lat);
+      setGeoLon(geo.lng);
       try { localStorage.setItem('sc_geoLabel', geo.label); } catch {}
       return fetch(`/api/services?lat=${geo.lat}&lng=${geo.lng}`).then(r => r.json());
     }).then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
@@ -2179,13 +2109,36 @@ export default function SafeCirclePage() {
           </div>
 
           {/* Crime map */}
-          <Section title="🗺  Crime incidents — last 14 days, 0.5 mi radius" dark={true} defaultOpen>
-            <LeafletMapComponent
-              lockedAddress={addrSet ? address : undefined}
-              citySuffix={selectedCity.geocodeSuffix}
-              esriLayer={selectedCity.esriLayer}
-              crimeField={selectedCity.crimeField}
-            />
+          <Section title="🗺  Crime map" dark={true} defaultOpen>
+            {geoLat && geoLon ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                <a
+                  href={`https://spotcrime.com/map?lat=${geoLat}&lon=${geoLon}&address=`}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ display:'block', padding:'14px 16px', borderRadius:14, textAlign:'center',
+                    background:'linear-gradient(90deg,#22d3ee,#3b82f6)',
+                    color:'white', fontWeight:700, fontSize:15, textDecoration:'none',
+                    boxShadow:'0 4px 20px rgba(34,211,238,0.35)' }}>
+                  🗺 SpotCrime Map — {geoLabel || address}
+                </a>
+                {selectedCity.esriLayer && selectedCity.esriLayer !== 'spotcrime' && (
+                  <a
+                    href={`https://www.arcgis.com/apps/mapviewer/index.html?url=${encodeURIComponent(selectedCity.esriLayer)}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ display:'block', padding:'12px 16px', borderRadius:14, textAlign:'center',
+                      background:'linear-gradient(90deg,#10b981,#059669)',
+                      color:'white', fontWeight:700, fontSize:13, textDecoration:'none',
+                      boxShadow:'0 4px 15px rgba(16,185,129,0.3)' }}>
+                    📊 ESRI Crime Data — {selectedCity.name}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div style={{ height:80, display:'flex', alignItems:'center', justifyContent:'center',
+                color:'#475569', fontSize:13 }}>
+                Set an address above to load the crime map
+              </div>
+            )}
           </Section>
 
           {/* Warrants */}
@@ -2484,7 +2437,42 @@ export default function SafeCirclePage() {
 
           {/* ── Where It Works — city selector ── */}
           <div id="where-it-works">
-            <WhereItWorks onCitySelect={handleCitySelect} selectedCity={selectedCity} originCity={originCity} />
+            <WhereItWorks
+                onLocationSet={(loc) => {
+                  // Convert UniversalLocation to CityConfig shape
+                  const city: CityConfig = {
+                    id: loc.city.toLowerCase().replace(/\s/g,''),
+                    name: loc.city,
+                    state: loc.state,
+                    country: 'US',
+                    lat: 0, lng: 0, zoom: 14,
+                    geocodeSuffix: loc.geocodeSuffix,
+                    esriLayer: loc.esriLayer || 'spotcrime',
+                    crimeField: loc.crimeField || 'UCR_Category',
+                    updateFreq: 'Daily',
+                    apiStatus: loc.esriLayer ? '✅' : '~',
+                    warrantUrl: loc.warrantUrl || '',
+                    jailUrl: loc.jailUrl || '',
+                    placeholderAddress: loc.address,
+                  };
+                  handleCitySelect(city);
+                  setAddress(loc.address);
+                  setAddrSet(true);
+                  // Auto-fire the map immediately
+                  setTimeout(() => handleSetAddress(), 100);
+                }}
+                currentLocation={selectedCity ? {
+                  state: selectedCity.state,
+                  city: selectedCity.name,
+                  address: address,
+                  geocodeSuffix: selectedCity.geocodeSuffix,
+                  esriLayer: selectedCity.esriLayer,
+                  crimeField: selectedCity.crimeField,
+                  warrantUrl: selectedCity.warrantUrl,
+                  jailUrl: selectedCity.jailUrl,
+                  spotCrimeUrl: '',
+                } : null}
+              />
           </div>
 
           {/* Footer */}
