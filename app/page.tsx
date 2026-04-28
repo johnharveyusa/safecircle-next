@@ -42,7 +42,7 @@ async function geocodeAddress(raw: string, suffix: string) {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface NearbyService { name: string; address: string; phone: string; lat: number; lng: number; distanceMi: number; }
+interface NearbyService { name: string; address: string; phone: string; lat: number; lng: number; distanceMi: number; directionsUrl?: string; }
 interface EmergencyServices { police: NearbyService | null; fire: NearbyService | null; hospital: NearbyService | null; }
 interface Contact { id: string; name: string; phone: string; email: string; }
 interface TrackedPerson { id: string; name: string; lat: number; lng: number; updatedAt: number; }
@@ -138,7 +138,7 @@ function ServiceCard({ emoji, label, svc, loading }: { emoji: string; label: str
         </div>
         <div className="flex flex-col gap-2 flex-shrink-0">
           {svc.phone && <a href={`tel:${svc.phone}`} className="text-xs px-2 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-center">Call</a>}
-          <a href={directionsUrl(svc.address)} target="_blank" rel="noopener noreferrer"
+          <a href={svc.directionsUrl || directionsUrl(svc.address)} target="_blank" rel="noopener noreferrer"
             className="text-xs px-2 py-1 rounded-lg bg-blue-900/60 text-blue-300 hover:bg-blue-800/60 text-center">Directions →</a>
         </div>
       </div>
@@ -1581,6 +1581,15 @@ export default function SafeCirclePage() {
   const [showInstallBanner,setShowInstallBanner] = useState(false);
   const [darkMode,         setDarkMode]         = useState(true);
 
+  // Hydrate disclaimer state from localStorage after mount (fixes Next.js hydration error)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('sc_disclaimer_accepted') === '1') {
+        setShowDisclaimer(false);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e: any) => {
       e.preventDefault();
@@ -1738,24 +1747,55 @@ export default function SafeCirclePage() {
   const [devTapCount,     setDevTapCount]     = useState(0);
   const devTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Services fetch ──────────────────────────────────────────────────────
+  // ── Live GPS for nearest services ───────────────────────────────────────
+  const [gpsLat, setGpsLat] = useState<number | null>(null);
+  const [gpsLng, setGpsLng] = useState<number | null>(null);
+  const [gpsReady, setGpsReady] = useState(false);
+
   useEffect(() => {
-    if (!addrSet || !address.trim()) return;
-    const raw = address.trim();
-    if (lastGeoRef.current === raw) return;
-    lastGeoRef.current = raw;
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setGpsLat(pos.coords.latitude);
+        setGpsLng(pos.coords.longitude);
+        setGpsReady(true);
+      },
+      () => setGpsReady(false),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }, []);
+
+  // ── Services fetch — GPS first, falls back to geocoded address ───────────
+  useEffect(() => {
+    // Use live GPS if available, otherwise fall back to geocoded address coords
+    const lat = gpsLat ?? geoLat;
+    const lng = gpsLng ?? geoLon;
+    if (!lat || !lng) {
+      // No GPS and no geocoded address yet — try geocoding if address is set
+      if (!addrSet || !address.trim()) return;
+      const raw = address.trim();
+      if (lastGeoRef.current === raw) return;
+      lastGeoRef.current = raw;
+      setSvcLoading(true); setSvcError('');
+      setServices({ police: null, fire: null, hospital: null });
+      geocodeAddress(raw, selectedCity.geocodeSuffix).then(geo => {
+        if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return; }
+        setGeoLabel(geo.label);
+        setGeoLat(geo.lat);
+        setGeoLon(geo.lng);
+        try { localStorage.setItem('sc_geoLabel', geo.label); } catch {}
+        return fetch(`/api/services?lat=${geo.lat}&lng=${geo.lng}`).then(r => r.json());
+      }).then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
+        .catch(err => { setSvcError(err.message); setSvcLoading(false); });
+      return;
+    }
     setSvcLoading(true); setSvcError('');
     setServices({ police: null, fire: null, hospital: null });
-    geocodeAddress(raw, selectedCity.geocodeSuffix).then(geo => {
-      if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return; }
-      setGeoLabel(geo.label);
-      setGeoLat(geo.lat);
-      setGeoLon(geo.lng);
-      try { localStorage.setItem('sc_geoLabel', geo.label); } catch {}
-      return fetch(`/api/services?lat=${geo.lat}&lng=${geo.lng}`).then(r => r.json());
-    }).then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
+    fetch(`/api/services?lat=${lat}&lng=${lng}`)
+      .then(r => r.json())
+      .then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
       .catch(err => { setSvcError(err.message); setSvcLoading(false); });
-  }, [addrSet, address]);
+  }, [gpsLat, gpsLng, addrSet, address]);
 
   function handleSetAddress() {
     if (!address.trim()) return;
@@ -1908,7 +1948,7 @@ export default function SafeCirclePage() {
               <br /><br />
               <strong style={{color:'#ef4444'}}>Always call 911 in any emergency.</strong>
             </p>
-            <button onClick={() => setShowDisclaimer(false)} style={{
+            <button onClick={() => { try { localStorage.setItem('sc_disclaimer_accepted','1'); } catch {} setShowDisclaimer(false); }} style={{
               width:'100%', padding:16, borderRadius:14,
               background:'linear-gradient(90deg,#22d3ee,#3b82f6)',
               color:'white', fontWeight:900, fontSize:16,
@@ -2123,13 +2163,13 @@ export default function SafeCirclePage() {
                 </a>
                 {selectedCity.esriLayer && selectedCity.esriLayer !== 'spotcrime' && (
                   <a
-                    href={`https://www.arcgis.com/apps/mapviewer/index.html?url=${encodeURIComponent(selectedCity.esriLayer)}`}
+                    href={selectedCity.id === 'memphis' ? 'https://experience.arcgis.com/experience/7fe3d1d471984096ad287080e3cd5e60' : `https://www.arcgis.com/apps/mapviewer/index.html?url=${encodeURIComponent(selectedCity.esriLayer)}`}
                     target="_blank" rel="noopener noreferrer"
                     style={{ display:'block', padding:'12px 16px', borderRadius:14, textAlign:'center',
                       background:'linear-gradient(90deg,#10b981,#059669)',
                       color:'white', fontWeight:700, fontSize:13, textDecoration:'none',
                       boxShadow:'0 4px 15px rgba(16,185,129,0.3)' }}>
-                    📊 ESRI Crime Data — {selectedCity.name}
+                    📊 {selectedCity.id === 'memphis' ? 'MPD Safer Communities Dashboard' : `ESRI Crime Data — ${selectedCity.name}`}
                   </a>
                 )}
               </div>
@@ -2172,12 +2212,14 @@ export default function SafeCirclePage() {
 
           {/* Emergency services */}
           <Section title="🚨  Nearest police · fire · hospital" dark={true}>
-            <p style={{ fontSize:11, color:"#64748b", marginBottom:12 }}>{addrSet ? 'Nearest services — tap Call or Directions.' : 'Set an address above first.'}</p>
+            <p style={{ fontSize:11, color: gpsReady ? '#22d3ee' : '#64748b', marginBottom:12 }}>
+              {gpsReady ? '📍 Using your live location — nearest services below.' : addrSet ? 'Nearest services — tap Call or Directions.' : 'Set an address above first.'}
+            </p>
             {svcError && <p className="text-xs text-rose-400 mb-2">{svcError}</p>}
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-              <ServiceCard emoji="🚓" label="Police"   svc={services.police}   loading={svcLoading} />
-              <ServiceCard emoji="🚒" label="Fire"     svc={services.fire}     loading={svcLoading} />
-              <ServiceCard emoji="🏥" label="Hospital" svc={services.hospital} loading={svcLoading} />
+              <ServiceCard emoji="🚓" label="Police"   svc={services.police   ? { ...services.police,   directionsUrl: `https://www.google.com/maps/dir/${gpsLat ?? ''},${gpsLng ?? ''}/${services.police.lat},${services.police.lng}` } : null}   loading={svcLoading} />
+              <ServiceCard emoji="🚒" label="Fire"     svc={services.fire     ? { ...services.fire,     directionsUrl: `https://www.google.com/maps/dir/${gpsLat ?? ''},${gpsLng ?? ''}/${services.fire.lat},${services.fire.lng}` } : null}     loading={svcLoading} />
+              <ServiceCard emoji="🏥" label="Hospital" svc={services.hospital ? { ...services.hospital, directionsUrl: `https://www.google.com/maps/dir/${gpsLat ?? ''},${gpsLng ?? ''}/${services.hospital.lat},${services.hospital.lng}` } : null} loading={svcLoading} />
             </div>
           </Section>
 
