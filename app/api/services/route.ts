@@ -23,13 +23,20 @@ function calcDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: numbe
 }
 
 async function findNearest(lat: number, lng: number, type: string, keyword: string) {
-  // Step 1: Nearby search
-  const nearbyUrl =
-    `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
-    `?location=${lat},${lng}&rankby=distance&type=${type}&keyword=${encodeURIComponent(keyword)}&key=${GOOGLE_API_KEY}`;
+  // Step 1: Nearby search — try with keyword first, then type-only as fallback
+  const base = `https://maps.googleapis.com/maps/api/place/nearbysearch/json`;
+  const primaryUrl = `${base}?location=${lat},${lng}&rankby=distance&type=${type}&keyword=${encodeURIComponent(keyword)}&key=${GOOGLE_API_KEY}`;
+  const fallbackUrl = `${base}?location=${lat},${lng}&rankby=distance&type=${type}&key=${GOOGLE_API_KEY}`;
 
-  const nearbyRes = await fetch(nearbyUrl);
-  const nearbyData = await nearbyRes.json();
+  let nearbyData: any = null;
+  const r1 = await fetch(primaryUrl);
+  nearbyData = await r1.json();
+
+  // If primary returns nothing, try without keyword
+  if (!nearbyData.results || nearbyData.results.length === 0) {
+    const r2 = await fetch(fallbackUrl);
+    nearbyData = await r2.json();
+  }
 
   if (!nearbyData.results || nearbyData.results.length === 0) {
     return null;
@@ -77,7 +84,7 @@ export async function GET(req: NextRequest) {
   try {
     const [police, fire, hospital] = await Promise.all([
       findNearest(lat, lng, 'police', 'police station'),
-      findNearest(lat, lng, 'fire_station', 'fire station'),
+      findNearest(lat, lng, 'fire_station', 'fire department'),
       findNearest(lat, lng, 'hospital', 'hospital'),
     ]);
 

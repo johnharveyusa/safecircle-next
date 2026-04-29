@@ -133,13 +133,13 @@ function ServiceCard({ emoji, label, svc, loading }: { emoji: string; label: str
           <p className="text-sm font-medium text-slate-200">{emoji} {svc.name}</p>
           <p className="text-xs text-slate-500 truncate">{svc.address}</p>
           {svc.distanceMi > 0 && <p style={{ fontSize:11, color:"#475569" }}>{svc.distanceMi.toFixed(1)} mi away</p>}
-          {svc.phone ? <a href={`tel:${svc.phone}`} style={{ fontSize:11, color:"#60a5fa", textDecoration:"underline" }}>{svc.phone}</a>
+          {svc.phone ? <a href={`tel:${svc.phone}`} style={{ fontSize:11, color:"#f97316", textDecoration:"underline" }}>{svc.phone}</a>
             : <p className="text-xs text-slate-600">Phone not available</p>}
         </div>
         <div className="flex flex-col gap-2 flex-shrink-0">
-          {svc.phone && <a href={`tel:${svc.phone}`} className="text-xs px-2 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-center">Call</a>}
+          {svc.phone && <a href={`tel:${svc.phone}`} style={{ fontSize:12, padding:'6px 12px', borderRadius:8, background:'rgba(249,115,22,0.15)', color:'#f97316', border:'1px solid rgba(249,115,22,0.4)', textAlign:'center', textDecoration:'none', fontWeight:700 }}>📞 Call</a>}
           <a href={svc.directionsUrl || directionsUrl(svc.address)} target="_blank" rel="noopener noreferrer"
-            className="text-xs px-2 py-1 rounded-lg bg-blue-900/60 text-blue-300 hover:bg-blue-800/60 text-center">Directions →</a>
+            style={{ fontSize:12, padding:'6px 12px', borderRadius:8, background:'rgba(249,115,22,0.15)', color:'#f97316', border:'1px solid rgba(249,115,22,0.4)', textAlign:'center', textDecoration:'none', fontWeight:700 }}>Directions →</a>
         </div>
       </div>
     </div>
@@ -1865,6 +1865,7 @@ export default function SafeCirclePage() {
 
   // ── Share SafeCircle ────────────────────────────────────────────────────────
   const [shareCopied, setShareCopied] = useState(false);
+  const [showCityPicker, setShowCityPicker] = useState(false);
   const SHARE_URL = 'https://safecircle.chat';
   const SHARE_MSG = 'Stay safe with SafeCircle — free public safety app for Memphis field workers: ' + SHARE_URL;
 
@@ -1912,12 +1913,12 @@ export default function SafeCirclePage() {
       <style>{`
         .sc-tab-btn { transition: color 0.18s, background 0.18s, text-shadow 0.18s; }
         .sc-tab-btn:hover .sc-tab-icon {
-          text-shadow: 0 0 10px rgba(34,211,238,0.9), 0 0 20px rgba(34,211,238,0.5);
+          text-shadow: 0 0 10px rgba(249,115,22,0.9), 0 0 20px rgba(249,115,22,0.5);
           filter: brightness(1.3);
         }
         .sc-tab-btn:hover {
-          color: #67e8f9 !important;
-          background: rgba(34,211,238,0.08) !important;
+          color: #fb923c !important;
+          background: rgba(249,115,22,0.08) !important;
         }
       `}</style>
 
@@ -2015,9 +2016,9 @@ export default function SafeCirclePage() {
               style={{
                 flex:1, padding:'10px 8px', borderRadius:'12px 12px 0 0',
                 fontSize:12, fontWeight:700, cursor:'pointer', border:'none',
-                borderBottom: activeTab === t.id ? '3px solid #22d3ee' : '3px solid transparent',
-                background: activeTab === t.id ? 'rgba(34,211,238,0.1)' : 'transparent',
-                color: activeTab === t.id ? '#22d3ee' : '#475569',
+                borderBottom: activeTab === t.id ? '3px solid #f97316' : '3px solid transparent',
+                background: activeTab === t.id ? 'rgba(249,115,22,0.1)' : 'transparent',
+                color: activeTab === t.id ? '#f97316' : '#475569',
               }}>
               <span className="sc-tab-icon" style={{fontSize:16,display:'block'}}>{t.label}</span>
               <span style={{fontSize:9,marginTop:2,display:'block'}}>{t.sub}</span>
@@ -2133,18 +2134,15 @@ export default function SafeCirclePage() {
               {selectedCity.name}{selectedCity.state ? `, ${selectedCity.state}` : ''} {selectedCity.apiStatus}
             </span>
             <button
-              onClick={() => {
-                // Scroll to WhereItWorks section
-                const el = document.getElementById('where-it-works');
-                if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
-              }}
+              onClick={() => setShowCityPicker(v => !v)}
               style={{
                 padding:'6px 14px', borderRadius:20, fontSize:11, fontWeight:700,
-                background:'rgba(168,85,247,0.15)', border:'1px solid rgba(168,85,247,0.4)',
-                color:'#c4b5fd', cursor:'pointer', whiteSpace:'nowrap',
+                background: showCityPicker ? 'rgba(249,115,22,0.2)' : 'rgba(168,85,247,0.15)',
+                border: showCityPicker ? '1px solid rgba(249,115,22,0.5)' : '1px solid rgba(168,85,247,0.4)',
+                color: showCityPicker ? '#f97316' : '#c4b5fd', cursor:'pointer', whiteSpace:'nowrap',
                 touchAction:'manipulation', flexShrink:0,
               }}>
-              ✏ Change city
+              {showCityPicker ? '✕ Close' : '✏ Change city'}
             </button>
           </div>
 
@@ -2373,36 +2371,58 @@ export default function SafeCirclePage() {
                   )}
                 </div>
 
-                {/* ── Developer Response — hidden tap trigger (3 taps unlocks) ── */}
+                {/* ── Developer Response — hidden tap trigger (3 taps + PIN) ── */}
                 <div style={{ borderTop:'1px solid rgba(168,85,247,0.12)', paddingTop:10 }}>
-                  {/* Hidden tap zone — tiny, invisible, top-right corner feel */}
                   {!devUnlocked && (
-                    <div
-                      onClick={() => {
-                        const next = devTapCount + 1;
-                        if (devTapTimer.current) clearTimeout(devTapTimer.current);
-                        if (next >= 3) {
-                          setDevUnlocked(true);
-                          setDevTapCount(0);
-                          setShowDevResponse(true);
-                        } else {
-                          setDevTapCount(next);
-                          devTapTimer.current = setTimeout(() => setDevTapCount(0), 2000);
-                        }
-                      }}
-                      style={{
-                        width:28, height:28, borderRadius:'50%',
-                        background:'rgba(168,85,247,0.06)',
-                        border:'1px solid rgba(168,85,247,0.12)',
-                        cursor:'default', userSelect:'none',
-                        display:'flex', alignItems:'center', justifyContent:'center',
-                        touchAction:'manipulation',
-                      }}
-                      title=""
-                    >
-                      <span style={{ fontSize:9, color:'rgba(168,85,247,0.3)' }}>
-                        {devTapCount > 0 ? '·'.repeat(devTapCount) : '·'}
-                      </span>
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      <div
+                        onClick={() => {
+                          const next = devTapCount + 1;
+                          if (devTapTimer.current) clearTimeout(devTapTimer.current);
+                          if (next >= 3) {
+                            setDevTapCount(0);
+                            setShowDevResponse(true); // show PIN prompt
+                          } else {
+                            setDevTapCount(next);
+                            devTapTimer.current = setTimeout(() => setDevTapCount(0), 2500);
+                          }
+                        }}
+                        style={{
+                          width:52, height:52, borderRadius:12,
+                          background:'rgba(168,85,247,0.08)',
+                          border:'1px solid rgba(168,85,247,0.2)',
+                          cursor:'default', userSelect:'none',
+                          display:'flex', alignItems:'center', justifyContent:'center',
+                          touchAction:'manipulation',
+                        }}
+                      >
+                        <span style={{ fontSize:11, color:'rgba(168,85,247,0.4)', fontWeight:700 }}>
+                          {devTapCount > 0 ? '●'.repeat(devTapCount) : '·'}
+                        </span>
+                      </div>
+                      {showDevResponse && !devUnlocked && (
+                        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                          <p style={{ fontSize:11, color:'#a855f7', margin:0 }}>🔐 Enter PIN to continue</p>
+                          <input
+                            type="password" inputMode="numeric" maxLength={4}
+                            placeholder="4-digit PIN"
+                            autoFocus
+                            onChange={e => {
+                              if (e.target.value === '1901') {
+                                setDevUnlocked(true);
+                                setShowDevResponse(true);
+                              }
+                            }}
+                            style={{ width:120, padding:'8px 12px', borderRadius:10, fontSize:16,
+                              background:'rgba(255,255,255,0.06)', border:'1px solid rgba(168,85,247,0.4)',
+                              color:'white', outline:'none', textAlign:'center', letterSpacing:6 }}
+                          />
+                          <button onClick={() => { setShowDevResponse(false); setDevTapCount(0); }}
+                            style={{ fontSize:10, color:'#64748b', background:'none', border:'none', cursor:'pointer', textAlign:'left' }}>
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -2477,11 +2497,11 @@ export default function SafeCirclePage() {
 
 
 
-          {/* ── Where It Works — city selector ── */}
-          <div id="where-it-works">
-            <WhereItWorks
+          {/* ── City picker — slides in when Change City is tapped ── */}
+          {showCityPicker && (
+            <div id="where-it-works">
+              <WhereItWorks
                 onLocationSet={(loc) => {
-                  // Convert UniversalLocation to CityConfig shape
                   const city: CityConfig = {
                     id: loc.city.toLowerCase().replace(/\s/g,''),
                     name: loc.city,
@@ -2500,7 +2520,7 @@ export default function SafeCirclePage() {
                   handleCitySelect(city);
                   setAddress(loc.address);
                   setAddrSet(true);
-                  // Auto-fire the map immediately
+                  setShowCityPicker(false);
                   setTimeout(() => handleSetAddress(), 100);
                 }}
                 currentLocation={selectedCity ? {
@@ -2515,7 +2535,8 @@ export default function SafeCirclePage() {
                   spotCrimeUrl: '',
                 } : null}
               />
-          </div>
+            </div>
+          )}
 
           {/* Footer */}
           <div style={{ textAlign:'center', padding:'16px 0 8px' }}>
