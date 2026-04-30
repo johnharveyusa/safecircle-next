@@ -1766,13 +1766,73 @@ export default function SafeCirclePage() {
     );
   };
 
-  // ── Services fetch — GPS first, falls back to geocoded address ───────────
+  // ── Services fetch — client-side Overpass (free, no API key) ───────────
   useEffect(() => {
-    // Use live GPS if available, otherwise fall back to geocoded address coords
+    function distMi(lat1: number, lon1: number, lat2: number, lon2: number) {
+      const R = 3958.8;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 +
+        Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    async function fetchOverpass(lat: number, lng: number) {
+      const radius = 20000;
+      const query = `[out:json][timeout:15];
+(
+  node[amenity=police](around:${radius},${lat},${lng});
+  way[amenity=police](around:${radius},${lat},${lng});
+  node[amenity=fire_station](around:${radius},${lat},${lng});
+  node[amenity=hospital](around:${radius},${lat},${lng});
+  node[amenity=clinic](around:${radius},${lat},${lng});
+);
+out center 30;`;
+      const r = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+      });
+      const j = await r.json();
+      const elements: any[] = j.elements ?? [];
+
+      function nearest(amenity: string, fallbackName: string) {
+        const matches = elements.filter(e => e.tags?.amenity === amenity);
+        if (!matches.length) return null;
+        const sorted = matches
+          .map(e => {
+            // way elements use center coords; node elements use direct lat/lon
+            const elat = e.lat ?? e.center?.lat;
+            const elon = e.lon ?? e.center?.lon;
+            return { e, elat, elon, d: (elat && elon) ? distMi(lat, lng, elat, elon) : 99999 };
+          })
+          .filter(x => x.elat && x.elon)
+          .sort((a, b) => a.d - b.d);
+        if (!sorted.length) return null;
+        const { e, elat, elon, d } = sorted[0];
+        const t = e.tags ?? {};
+        const addrParts = [t['addr:housenumber'], t['addr:street'], t['addr:city']].filter(Boolean);
+        return {
+          name: t.name ?? fallbackName,
+          address: addrParts.length ? addrParts.join(' ') : `${elat!.toFixed(4)}, ${elon!.toFixed(4)}`,
+          phone: t.phone ?? t['contact:phone'] ?? '',
+          lat: elat!, lng: elon!,
+          distanceMi: parseFloat(d.toFixed(2)),
+        };
+      }
+
+      return {
+        police:   nearest('police',       'Police Station') ?? nearest('sheriff_office', 'Sheriff Office'),
+        fire:     nearest('fire_station',  'Fire Station'),
+        hospital: nearest('hospital',      null as any) ?? nearest('clinic', 'Medical Clinic'),
+      };
+    }
+
+    // Use live GPS if available, otherwise geocode the address
     const lat = gpsLat ?? geoLat;
     const lng = gpsLng ?? geoLon;
+
     if (!lat || !lng) {
-      // No GPS and no geocoded address yet — try geocoding if address is set
       if (!addrSet || !address.trim()) return;
       const raw = address.trim();
       if (lastGeoRef.current === raw) return;
@@ -1780,20 +1840,20 @@ export default function SafeCirclePage() {
       setSvcLoading(true); setSvcError('');
       setServices({ police: null, fire: null, hospital: null });
       geocodeAddress(raw, selectedCity.geocodeSuffix).then(geo => {
-        if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return; }
+        if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return null; }
         setGeoLabel(geo.label);
         setGeoLat(geo.lat);
         setGeoLon(geo.lng);
         try { localStorage.setItem('sc_geoLabel', geo.label); } catch {}
-        return fetch(`/api/services?lat=${geo.lat}&lng=${geo.lng}`).then(r => r.json());
+        return fetchOverpass(geo.lat, geo.lng);
       }).then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
         .catch(err => { setSvcError(err.message); setSvcLoading(false); });
       return;
     }
+
     setSvcLoading(true); setSvcError('');
     setServices({ police: null, fire: null, hospital: null });
-    fetch(`/api/services?lat=${lat}&lng=${lng}`)
-      .then(r => r.json())
+    fetchOverpass(lat, lng)
       .then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
       .catch(err => { setSvcError(err.message); setSvcLoading(false); });
   }, [gpsLat, gpsLng, addrSet, address]);
