@@ -1677,8 +1677,7 @@ export default function SafeCirclePage() {
     try {
       const a = localStorage.getItem('sc_address');
       if (a) setAddress(a);
-      const s = localStorage.getItem('sc_addrSet');
-      if (s === 'true') setAddrSet(true);
+      // addrSet intentionally NOT restored — user must confirm each session
       const g = localStorage.getItem('sc_geoLabel');
       if (g) setGeoLabel(g);
       // Save origin address if not yet saved (first ever load)
@@ -1751,19 +1750,21 @@ export default function SafeCirclePage() {
   const [gpsLat, setGpsLat] = useState<number | null>(null);
   const [gpsLng, setGpsLng] = useState<number | null>(null);
   const [gpsReady, setGpsReady] = useState(false);
+  const [showLocationConsent, setShowLocationConsent] = useState(false);
 
-  useEffect(() => {
+  const requestGPS = () => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       pos => {
         setGpsLat(pos.coords.latitude);
         setGpsLng(pos.coords.longitude);
         setGpsReady(true);
+        setShowLocationConsent(false);
       },
       () => setGpsReady(false),
       { enableHighAccuracy: true, timeout: 10000 },
     );
-  }, []);
+  };
 
   // ── Services fetch — GPS first, falls back to geocoded address ───────────
   useEffect(() => {
@@ -2106,40 +2107,29 @@ export default function SafeCirclePage() {
                 onChange={e => { const v = e.target.value; setAddress(v); setAddrSet(false); setGeoLabel(''); try { localStorage.setItem('sc_address', v); localStorage.setItem('sc_addrSet','false'); localStorage.removeItem('sc_geoLabel'); } catch {} }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSetAddress(); }}
                 style={{ flex:1, padding:'10px 14px', borderRadius:12, fontSize:14,
-                  background:'rgba(255,255,255,0.06)', border:'1px solid rgba(34,211,238,0.3)',
-                  color:'white', outline:'none' }} />
+                  background:'rgba(255,255,255,0.06)', border: addrSet ? '1px solid rgba(249,115,22,0.6)' : '1px solid rgba(34,211,238,0.3)',
+                  color: addrSet ? '#f97316' : 'white', fontWeight: addrSet ? 700 : 400, outline:'none' }} />
               <button onClick={handleSetAddress} disabled={!address.trim()}
                 style={{ padding:'10px 18px', borderRadius:12, fontSize:13, fontWeight:700,
                   color:'white', border:'none', cursor:'pointer', whiteSpace:'nowrap',
-                  background: address.trim() ? 'linear-gradient(90deg,#f97316,#ea580c)' : 'rgba(255,255,255,0.1)',
-                  boxShadow: address.trim() ? '0 4px 15px rgba(249,115,22,0.4)' : 'none',
+                  background: addrSet ? 'linear-gradient(90deg,#f97316,#ea580c)' : address.trim() ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
+                  boxShadow: addrSet ? '0 4px 15px rgba(249,115,22,0.4)' : 'none',
                   opacity: address.trim() ? 1 : 0.5 }}>
                 Set address
               </button>
             </div>
             {addrSet && <p style={{ fontSize:12, color:'#f97316', fontWeight:700 }}>✓ {geoLabel || (address.trim() + ', ' + selectedCity.geocodeSuffix)}</p>}
-            {!gpsReady && addrSet && (
+            {!gpsReady && addrSet && !showLocationConsent && (
               <div style={{
                 marginTop:8, padding:'10px 14px', borderRadius:12,
                 background:'rgba(249,115,22,0.08)', border:'1px solid rgba(249,115,22,0.35)',
                 display:'flex', alignItems:'center', justifyContent:'space-between', gap:10,
               }}>
                 <p style={{ fontSize:11, color:'#fb923c', margin:0, flex:1 }}>
-                  📍 Enable location for nearest police, fire &amp; hospital
+                  📍 Share your location for nearest police, fire &amp; hospital
                 </p>
                 <button
-                  onClick={() => {
-                    if (!navigator.geolocation) return;
-                    navigator.geolocation.getCurrentPosition(
-                      pos => {
-                        setGpsLat(pos.coords.latitude);
-                        setGpsLng(pos.coords.longitude);
-                        setGpsReady(true);
-                      },
-                      () => {},
-                      { enableHighAccuracy: true, timeout: 10000 },
-                    );
-                  }}
+                  onClick={() => setShowLocationConsent(true)}
                   style={{
                     padding:'6px 14px', borderRadius:10, fontSize:11, fontWeight:700,
                     background:'linear-gradient(90deg,#f97316,#ea580c)', border:'none',
@@ -2148,6 +2138,38 @@ export default function SafeCirclePage() {
                   }}>
                   Enable GPS
                 </button>
+              </div>
+            )}
+
+            {showLocationConsent && (
+              <div style={{
+                marginTop:8, padding:'16px', borderRadius:14,
+                background:'rgba(15,23,42,0.95)', border:'2px solid rgba(249,115,22,0.6)',
+                boxShadow:'0 8px 32px rgba(0,0,0,0.5)',
+              }}>
+                <p style={{ fontSize:13, fontWeight:700, color:'#f97316', margin:'0 0 8px 0' }}>📍 Location Authorization</p>
+                <p style={{ fontSize:12, color:'#cbd5e1', margin:'0 0 6px 0', lineHeight:1.5 }}>
+                  SafeCircle is requesting permission to capture your geocoded location.
+                </p>
+                <p style={{ fontSize:11, color:'#94a3b8', margin:'0 0 14px 0', lineHeight:1.5 }}>
+                  Your location is used only to find the nearest police station, fire station, and hospital. It is never stored or shared without your consent.
+                </p>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={requestGPS} style={{
+                    flex:1, padding:'10px', borderRadius:10, fontSize:12, fontWeight:700,
+                    background:'linear-gradient(90deg,#f97316,#ea580c)', border:'none',
+                    color:'white', cursor:'pointer', touchAction:'manipulation',
+                  }}>
+                    ✓ I Authorize Location Capture
+                  </button>
+                  <button onClick={() => setShowLocationConsent(false)} style={{
+                    padding:'10px 14px', borderRadius:10, fontSize:12, fontWeight:700,
+                    background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)',
+                    color:'#94a3b8', cursor:'pointer', touchAction:'manipulation',
+                  }}>
+                    Not Now
+                  </button>
+                </div>
               </div>
             )}
           </div>
