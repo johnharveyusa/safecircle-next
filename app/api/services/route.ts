@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
 
-interface PlaceResult {
-  name: string;
-  vicinity: string;
-  formatted_phone_number?: string;
-  place_id: string;
-  geometry: { location: { lat: number; lng: number } };
-}
+// ─── Distance helper ──────────────────────────────────────────────────────────
 
 function calcDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 3958.8;
@@ -22,51 +16,126 @@ function calcDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-async function findNearest(lat: number, lng: number, type: string, keyword: string) {
-  // Step 1: Nearby search — try with keyword first, then type-only as fallback
+// ─── Google Places lookup ─────────────────────────────────────────────────────
+
+async function findViaGoogle(lat: number, lng: number, type: string, keyword: string) {
   const base = `https://maps.googleapis.com/maps/api/place/nearbysearch/json`;
   const primaryUrl = `${base}?location=${lat},${lng}&rankby=distance&type=${type}&keyword=${encodeURIComponent(keyword)}&key=${GOOGLE_API_KEY}`;
   const fallbackUrl = `${base}?location=${lat},${lng}&rankby=distance&type=${type}&key=${GOOGLE_API_KEY}`;
 
   let nearbyData: any = null;
-  const r1 = await fetch(primaryUrl);
-  nearbyData = await r1.json();
-
-  // If primary returns nothing, try without keyword
-  if (!nearbyData.results || nearbyData.results.length === 0) {
-    const r2 = await fetch(fallbackUrl);
-    nearbyData = await r2.json();
-  }
-
-  if (!nearbyData.results || nearbyData.results.length === 0) {
+  try {
+    const r1 = await fetch(primaryUrl);
+    nearbyData = await r1.json();
+    if (!nearbyData.results?.length) {
+      const r2 = await fetch(fallbackUrl);
+      nearbyData = await r2.json();
+    }
+  } catch {
     return null;
   }
 
-  const best: PlaceResult = nearbyData.results[0];
-  const distMiles = calcDistanceMiles(lat, lng, best.geometry.location.lat, best.geometry.location.lng);
-  const distLabel = distMiles < 1 ? `${Math.round(distMiles * 5280)} ft` : `${distMiles.toFixed(1)} mi`;
+  if (!nearbyData.results?.length) return null;
 
-  // Step 2: Details for phone number
-  const detailsUrl =
-    `https://maps.googleapis.com/maps/api/place/details/json` +
-    `?place_id=${best.place_id}&fields=name,formatted_phone_number,formatted_address,opening_hours&key=${GOOGLE_API_KEY}`;
+  const best = nearbyData.results[0];
+  const bLat = best.geometry.location.lat;
+  const bLng = best.geometry.location.lng;
+  const distMi = calcDistanceMiles(lat, lng, bLat, bLng);
 
-  const detailsRes = await fetch(detailsUrl);
-  const detailsData = await detailsRes.json();
-  const details = detailsData.result || {};
+  // Get phone number via Details call
+  let phone: string | null = null;
+  let formattedAddress = best.vicinity || '';
+  try {
+    const detailsUrl =
+      `https://maps.googleapis.com/maps/api/place/details/json` +
+      `?place_id=${best.place_id}&fields=name,formatted_phone_number,formatted_address&key=${GOOGLE_API_KEY}`;
+    const dr = await fetch(detailsUrl);
+    const dd = await dr.json();
+    phone = dd.result?.formatted_phone_number || null;
+    formattedAddress = dd.result?.formatted_address || best.vicinity || '';
+  } catch { /* phone stays null */ }
 
   return {
     name: best.name,
-    address: details.formatted_address || best.vicinity,
-    phone: details.formatted_phone_number || null,
-    distance: distLabel,
-    lat: best.geometry.location.lat,
-    lng: best.geometry.location.lng,
-    place_id: best.place_id,
-    mapsUrl: `https://www.google.com/maps/place/?q=place_id:${best.place_id}`,
-    directionsUrl: `https://www.google.com/maps/dir/?api=1&destination=${best.geometry.location.lat},${best.geometry.location.lng}&destination_place_id=${best.place_id}`,
+    address: formattedAddress,
+    phone,
+    distanceMi: distMi,
+    lat: bLat,
+    lng: bLng,
+    directionsUrl: `https://www.google.com/maps/dir/?api=1&destination=${bLat},${bLng}&destination_place_id=${best.place_id}`,
   };
 }
+
+// ─── OpenStreetMap Overpass fallback ──────────────────────────────────────────
+
+async function findViaOverpass(lat: number, lng: number, osmAmenity: string) {
+  const radius = 8000; // ~5 miles
+  const query = `
+    [out:json][timeout:10];
+    (
+      node["amenity"="${osmAmenity}"](around:${radius},${lat},${lng});
+      way["amenity"="${osmAmenity}"](around:${radius},${lat},${lng});
+    );
+    out center 5;
+  `;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const data = await r.json();
+    if (!data.elements?.length) return null;
+
+    // Find closest
+    let best: any = null;
+    let bestDist = Infinity;
+    for (const el of data.elements) {
+      const eLat = el.lat ?? el.center?.lat;
+      const eLng = el.lon ?? el.center?.lon;
+      if (!eLat || !eLng) continue;
+      const d = calcDistanceMiles(lat, lng, eLat, eLng);
+      if (d < bestDist) { bestDist = d; best = { ...el, eLat, eLng }; }
+    }
+    if (!best) return null;
+
+    const name = best.tags?.name || best.tags?.['name:en'] || osmAmenity.replace('_', ' ');
+    const addr = [
+      best.tags?.['addr:housenumber'],
+      best.tags?.['addr:street'],
+      best.tags?.['addr:city'],
+      best.tags?.['addr:state'],
+    ].filter(Boolean).join(' ') || `Near ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+    return {
+      name,
+      address: addr,
+      phone: best.tags?.phone || best.tags?.['contact:phone'] || null,
+      distanceMi: bestDist,
+      lat: best.eLat,
+      lng: best.eLng,
+      directionsUrl: `https://www.google.com/maps/dir/?api=1&destination=${best.eLat},${best.eLng}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Combined: Google first, Overpass fallback ────────────────────────────────
+
+async function findNearest(
+  lat: number, lng: number,
+  googleType: string, googleKeyword: string,
+  osmAmenity: string,
+) {
+  if (GOOGLE_API_KEY) {
+    try {
+      const result = await findViaGoogle(lat, lng, googleType, googleKeyword);
+      if (result) return result;
+    } catch { /* fall through */ }
+  }
+  return findViaOverpass(lat, lng, osmAmenity);
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -77,15 +146,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'lat and lng are required' }, { status: 400 });
   }
 
-  if (!GOOGLE_API_KEY) {
-    return NextResponse.json({ error: 'GOOGLE_MAPS_API_KEY not configured' }, { status: 500 });
-  }
-
   try {
     const [police, fire, hospital] = await Promise.all([
-      findNearest(lat, lng, 'police', 'police station'),
-      findNearest(lat, lng, 'fire_station', 'fire department'),
-      findNearest(lat, lng, 'hospital', 'hospital'),
+      findNearest(lat, lng, 'police',       'police station',  'police'),
+      findNearest(lat, lng, 'fire_station', 'fire department', 'fire_station'),
+      findNearest(lat, lng, 'hospital',     'hospital',        'hospital'),
     ]);
 
     return NextResponse.json({ police, fire, hospital });

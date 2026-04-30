@@ -2111,12 +2111,45 @@ export default function SafeCirclePage() {
               <button onClick={handleSetAddress} disabled={!address.trim()}
                 style={{ padding:'10px 18px', borderRadius:12, fontSize:13, fontWeight:700,
                   color:'white', border:'none', cursor:'pointer', whiteSpace:'nowrap',
-                  background:'linear-gradient(90deg,#22d3ee,#3b82f6)',
-                  boxShadow:'0 4px 15px rgba(34,211,238,0.35)' }}>
+                  background: address.trim() ? 'linear-gradient(90deg,#f97316,#ea580c)' : 'rgba(255,255,255,0.1)',
+                  boxShadow: address.trim() ? '0 4px 15px rgba(249,115,22,0.4)' : 'none',
+                  opacity: address.trim() ? 1 : 0.5 }}>
                 Set address
               </button>
             </div>
-            {addrSet && <p style={{ fontSize:11, color:'#10b981', fontWeight:600 }}>✓ {geoLabel || (address.trim() + ', ' + selectedCity.geocodeSuffix)}</p>}
+            {addrSet && <p style={{ fontSize:12, color:'#f97316', fontWeight:700 }}>✓ {geoLabel || (address.trim() + ', ' + selectedCity.geocodeSuffix)}</p>}
+            {!gpsReady && addrSet && (
+              <div style={{
+                marginTop:8, padding:'10px 14px', borderRadius:12,
+                background:'rgba(249,115,22,0.08)', border:'1px solid rgba(249,115,22,0.35)',
+                display:'flex', alignItems:'center', justifyContent:'space-between', gap:10,
+              }}>
+                <p style={{ fontSize:11, color:'#fb923c', margin:0, flex:1 }}>
+                  📍 Enable location for nearest police, fire &amp; hospital
+                </p>
+                <button
+                  onClick={() => {
+                    if (!navigator.geolocation) return;
+                    navigator.geolocation.getCurrentPosition(
+                      pos => {
+                        setGpsLat(pos.coords.latitude);
+                        setGpsLng(pos.coords.longitude);
+                        setGpsReady(true);
+                      },
+                      () => {},
+                      { enableHighAccuracy: true, timeout: 10000 },
+                    );
+                  }}
+                  style={{
+                    padding:'6px 14px', borderRadius:10, fontSize:11, fontWeight:700,
+                    background:'linear-gradient(90deg,#f97316,#ea580c)', border:'none',
+                    color:'white', cursor:'pointer', whiteSpace:'nowrap',
+                    touchAction:'manipulation',
+                  }}>
+                  Enable GPS
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── City quick-switcher bar ── */}
@@ -2501,6 +2534,7 @@ export default function SafeCirclePage() {
           {showCityPicker && (
             <div id="where-it-works">
               <WhereItWorks
+                key={selectedCity.id}
                 onLocationSet={(loc) => {
                   const city: CityConfig = {
                     id: loc.city.toLowerCase().replace(/\s/g,''),
