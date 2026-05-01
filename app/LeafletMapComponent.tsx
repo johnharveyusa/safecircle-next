@@ -249,6 +249,11 @@ export default function LeafletMapComponent({
   const [noApiNote,      setNoApiNote]      = useState('');
   const [spotCrimeIframe, setSpotCrimeIframe] = useState('');
 
+  interface ServicePlace { name: string; type: 'police'|'fire'|'hospital'; lat: number; lng: number; vicinity?: string; }
+  const [services, setServices] = useState<ServicePlace[]>([]);
+  const serviceMarkersRef    = useRef<any[]>([]);
+  const bigServiceMarkersRef = useRef<any[]>([]);
+
   const mapRef        = useRef<any>(null);
   const bigMapRef     = useRef<any>(null);
   const markersRef    = useRef<any[]>([]);
@@ -268,6 +273,8 @@ export default function LeafletMapComponent({
     if (bigMapRef.current) { try { bigMapRef.current.remove(); } catch {} bigMapRef.current = null; }
     markersRef.current = [];
     bigMarkersRef.current = [];
+    serviceMarkersRef.current = [];
+    bigServiceMarkersRef.current = [];
     geoRef.current = null;
     setStage('input');
     setAddress('');
@@ -280,6 +287,7 @@ export default function LeafletMapComponent({
     setEnlarged(false);
     setNoApiNote('');
     setSpotCrimeIframe('');
+    setServices([]);
     setLoading(false);
   }
 
@@ -325,7 +333,34 @@ export default function LeafletMapComponent({
     }
   }
 
-  // ── Init small map ──────────────────────────────────────────────────────
+  // ── Service markers (police / fire / hospital) ─────────────────────────
+  function buildServiceMarkers(L: any, map: any, store: any[], serviceList: any[]) {
+    const icons: Record<string, { emoji: string; color: string }> = {
+      police:   { emoji: '👮', color: '#1d4ed8' },
+      fire:     { emoji: '🚒', color: '#dc2626' },
+      hospital: { emoji: '🏥', color: '#16a34a' },
+    };
+    for (const svc of serviceList) {
+      const cfg = icons[svc.type] || { emoji: '📍', color: '#6b7280' };
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44" viewBox="0 0 36 44">
+        <path d="M18 2 C10.27 2 4 8.27 4 16 C4 27 18 42 18 42 C18 42 32 27 32 16 C32 8.27 25.73 2 18 2Z"
+          fill="${cfg.color}" stroke="#fff" stroke-width="1.5"/>
+        <text x="18" y="21" text-anchor="middle" font-size="14">${cfg.emoji}</text>
+      </svg>`;
+      const marker = L.marker([svc.lat, svc.lng], {
+        icon: L.divIcon({ html: svg, className: '', iconSize: [36,44], iconAnchor: [18,42], popupAnchor: [0,-40] }),
+        zIndexOffset: 500,
+      });
+      marker.bindPopup(`<div style="font-size:12px;min-width:160px;line-height:1.6">
+        <b style="color:${cfg.color}">${cfg.emoji} ${svc.name}</b><br>
+        <span style="color:#888;font-size:11px">${svc.vicinity || svc.type}</span>
+      </div>`);
+      marker.addTo(map);
+      store.push(marker);
+    }
+  }
+
+
   useEffect(() => {
     if (stage !== 'map') return;
     let cancelled = false;
@@ -363,11 +398,12 @@ export default function LeafletMapComponent({
         map.invalidateSize();
         map.setView([lat, lon], 13);
         buildMarkers(L, map, markersRef.current, incidents);
+        buildServiceMarkers(L, map, serviceMarkersRef.current, services);
         setMapStatus(`${incidents.length} incidents — tap a category to filter`);
       }, 600);
     }, 50);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [stage, incidents]);
+  }, [stage, incidents, services]);
 
   // ── Init enlarged map ───────────────────────────────────────────────────
   useEffect(() => {
@@ -401,9 +437,10 @@ export default function LeafletMapComponent({
         weight: 1.5, dashArray: '4 4',
       }).addTo(map);
       buildMarkers(L, map, bigMarkersRef.current, incidents);
+      buildServiceMarkers(L, map, bigServiceMarkersRef.current, services);
     }, 100);
     return () => { if (bigMapRef.current) { try { bigMapRef.current.remove(); } catch {} bigMapRef.current = null; } };
-  }, [enlarged, incidents]);
+  }, [enlarged, incidents, services]);
 
   // ── Filter ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -488,6 +525,14 @@ export default function LeafletMapComponent({
     setIncidents(rawIncidents);
     setCategoryCounts(Object.entries(counts).sort((a, b) => b[1] - a[1]));
     setActiveFilter(null);
+
+    // Fetch nearest police / fire / hospital
+    try {
+      const svRes = await fetch(`/api/services?lat=${geo.lat}&lng=${geo.lon}`);
+      const svData = await svRes.json();
+      setServices(Array.isArray(svData) ? svData : []);
+    } catch { setServices([]); }
+
     setLoading(false);
     setStage('map');
   }

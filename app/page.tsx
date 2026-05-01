@@ -1778,85 +1778,45 @@ export default function SafeCirclePage() {
     }
 
     async function fetchOverpass(lat: number, lng: number) {
-      const radius = 20000;
-      const query = `[out:json][timeout:15];
-(
-  node[amenity=police](around:${radius},${lat},${lng});
-  way[amenity=police](around:${radius},${lat},${lng});
-  node[amenity=fire_station](around:${radius},${lat},${lng});
-  node[amenity=hospital](around:${radius},${lat},${lng});
-  node[amenity=clinic](around:${radius},${lat},${lng});
-);
-out center 30;`;
-      const r = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query),
-      });
-      const j = await r.json();
-      const elements: any[] = j.elements ?? [];
-
-      function nearest(amenity: string, fallbackName: string) {
-        const matches = elements.filter(e => e.tags?.amenity === amenity);
-        if (!matches.length) return null;
-        const sorted = matches
-          .map(e => {
-            // way elements use center coords; node elements use direct lat/lon
-            const elat = e.lat ?? e.center?.lat;
-            const elon = e.lon ?? e.center?.lon;
-            return { e, elat, elon, d: (elat && elon) ? distMi(lat, lng, elat, elon) : 99999 };
-          })
-          .filter(x => x.elat && x.elon)
-          .sort((a, b) => a.d - b.d);
-        if (!sorted.length) return null;
-        const { e, elat, elon, d } = sorted[0];
-        const t = e.tags ?? {};
-        const addrParts = [t['addr:housenumber'], t['addr:street'], t['addr:city']].filter(Boolean);
-        return {
-          name: t.name ?? fallbackName,
-          address: addrParts.length ? addrParts.join(' ') : `${elat!.toFixed(4)}, ${elon!.toFixed(4)}`,
-          phone: t.phone ?? t['contact:phone'] ?? '',
-          lat: elat!, lng: elon!,
-          distanceMi: parseFloat(d.toFixed(2)),
-        };
-      }
-
-      return {
-        police:   nearest('police',       'Police Station') ?? nearest('sheriff_office', 'Sheriff Office'),
-        fire:     nearest('fire_station',  'Fire Station'),
-        hospital: nearest('hospital',      null as any) ?? nearest('clinic', 'Medical Clinic'),
-      };
+      const r = await fetch(`/api/services?lat=${lat}&lng=${lng}`);
+      if (!r.ok) throw new Error('Failed to fetch');
+      return await r.json();
     }
 
-    // Use live GPS if available, otherwise geocode the address
+    // Use live GPS if available, then already-geocoded coords, then geocode fresh
     const lat = gpsLat ?? geoLat;
     const lng = gpsLng ?? geoLon;
 
-    if (!lat || !lng) {
-      if (!addrSet || !address.trim()) return;
-      const raw = address.trim();
-      if (lastGeoRef.current === raw) return;
-      lastGeoRef.current = raw;
+    if (lat && lng) {
+      // We already have coords — fetch directly (dedup by coord key)
+      const key = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+      if (lastGeoRef.current === key) return;
+      lastGeoRef.current = key;
       setSvcLoading(true); setSvcError('');
       setServices({ police: null, fire: null, hospital: null });
-      geocodeAddress(raw, selectedCity.geocodeSuffix).then(geo => {
-        if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return null; }
-        setGeoLabel(geo.label);
-        setGeoLat(geo.lat);
-        setGeoLon(geo.lng);
-        try { localStorage.setItem('sc_geoLabel', geo.label); } catch {}
-        return fetchOverpass(geo.lat, geo.lng);
-      }).then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
+      fetchOverpass(lat, lng)
+        .then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
         .catch(err => { setSvcError(err.message); setSvcLoading(false); });
       return;
     }
 
+    // No coords yet — need to geocode the address first
+    if (!addrSet || !address.trim()) return;
+    const raw = address.trim();
+    if (lastGeoRef.current === raw) return;
+    lastGeoRef.current = raw;
     setSvcLoading(true); setSvcError('');
     setServices({ police: null, fire: null, hospital: null });
-    fetchOverpass(lat, lng)
-      .then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
+    geocodeAddress(raw, selectedCity.geocodeSuffix).then(geo => {
+      if (!geo) { setSvcLoading(false); setSvcError('Could not geocode address.'); return null; }
+      setGeoLabel(geo.label);
+      setGeoLat(geo.lat);
+      setGeoLon(geo.lng);
+      try { localStorage.setItem('sc_geoLabel', geo.label); } catch {}
+      return fetchOverpass(geo.lat, geo.lng);
+    }).then(svcs => { if (svcs) setServices(svcs); setSvcLoading(false); })
       .catch(err => { setSvcError(err.message); setSvcLoading(false); });
-  }, [gpsLat, gpsLng, addrSet, address]);
+  }, [gpsLat, gpsLng, geoLat, geoLon, addrSet, address]);
 
   function handleSetAddress() {
     if (!address.trim()) return;
